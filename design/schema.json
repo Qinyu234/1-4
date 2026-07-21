@@ -1,0 +1,5 @@
+{
+  "module_tag": "module",
+  "behaviour_tag": "behaviour",
+  "behaviour_scope_attr": "data-modules"
+}

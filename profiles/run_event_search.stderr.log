@@ -1,0 +1,8 @@
+usage: python.exe [-h] [--n-points N_POINTS] [--ln-k-min LN_K_MIN]
+                  [--ln-k-max LN_K_MAX] [--radius RADIUS]
+                  [--n-periods N_PERIODS] [--refine-maxiter REFINE_MAXITER]
+                  [--smoke] [--use-distance-matrix] [--use-continuation]
+                  [--t-scan-range T_SCAN_RANGE T_SCAN_RANGE]
+                  [--t-scan-steps T_SCAN_STEPS] [--solver-type {own,rebound}]
+                  [--evaluation-mode {position,event}]
+python.exe: error: unrecognized arguments: D:\10_projects\playground\Astrophysics\experiments\run_event_search.py

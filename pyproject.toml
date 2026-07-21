@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fairy-orbit"
+version = "0.1.0"
+description = "Periodic weaving-orbit search platform for tetrahedron fairies"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "matplotlib>=3.8",
+]
+
+[tool.setuptools.packages.find]
+include = ["fairy_orbit*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
