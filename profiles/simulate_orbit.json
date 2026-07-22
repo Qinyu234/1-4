@@ -4,15 +4,37 @@
         "D:\\10_projects\\playground\\Astrophysics\\.venv\\Scripts\\python.exe",
         "D:\\10_projects\\playground\\Astrophysics\\experiments\\simulate_orbit.py"
     ],
-    "elapsed_time_sec": 4.62157940864563,
+    "elapsed_time_sec": 35.91589140892029,
     "entrypoint_dir": "D:\\10_projects\\playground\\Astrophysics\\experiments",
     "filename": "D:\\10_projects\\playground\\Astrophysics\\experiments",
     "files": {
         "D:\\10_projects\\playground\\Astrophysics\\experiments\\simulate_orbit.py": {
-            "functions": [],
+            "functions": [
+                {
+                    "line": "main",
+                    "lineno": 18,
+                    "memory_samples": [],
+                    "n_avg_mb": 0.0,
+                    "n_copy_mb_s": 0.0,
+                    "n_core_utilization": 0.03169130068490216,
+                    "n_cpu_percent_c": 10.011575712058068,
+                    "n_cpu_percent_python": 7.20631550187303,
+                    "n_gpu_avg_memory_mb": 0.0,
+                    "n_gpu_peak_memory_mb": 0.0,
+                    "n_gpu_percent": 0.0,
+                    "n_growth_mb": 0.0,
+                    "n_malloc_mb": 0.0,
+                    "n_mallocs": 0,
+                    "n_peak_mb": 0.0,
+                    "n_python_fraction": 0,
+                    "n_sys_percent": 20.356248762343952,
+                    "n_usage_fraction": 0
+                }
+            ],
             "imports": [
                 "from __future__ import annotations",
                 "import argparse",
+                "import sys",
                 "import numpy as np",
                 "from pathlib import Path"
             ],
@@ -117,32 +139,8 @@
                 {
                     "end_outermost_loop": 5,
                     "end_region_line": 5,
-                    "line": "import numpy as np\n",
+                    "line": "import sys\n",
                     "lineno": 5,
-                    "memory_samples": [],
-                    "n_avg_mb": 0.0,
-                    "n_copy_mb_s": 0.0,
-                    "n_core_utilization": 0.03375322010948074,
-                    "n_cpu_percent_c": 5.21904311657736,
-                    "n_cpu_percent_python": 1.6801748463830544,
-                    "n_gpu_avg_memory_mb": 0.0,
-                    "n_gpu_peak_memory_mb": 0.0,
-                    "n_gpu_percent": 0.0,
-                    "n_growth_mb": 0.0,
-                    "n_malloc_mb": 0.0,
-                    "n_mallocs": 0,
-                    "n_peak_mb": 0.0,
-                    "n_python_fraction": 0,
-                    "n_sys_percent": 10.433587735496273,
-                    "n_usage_fraction": 0,
-                    "start_outermost_loop": 5,
-                    "start_region_line": 5
-                },
-                {
-                    "end_outermost_loop": 6,
-                    "end_region_line": 6,
-                    "line": "from pathlib import Path\n",
-                    "lineno": 6,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
                     "n_copy_mb_s": 0.0,
@@ -159,13 +157,37 @@
                     "n_python_fraction": 0,
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
+                    "start_outermost_loop": 5,
+                    "start_region_line": 5
+                },
+                {
+                    "end_outermost_loop": 6,
+                    "end_region_line": 6,
+                    "line": "import numpy as np\n",
+                    "lineno": 6,
+                    "memory_samples": [],
+                    "n_avg_mb": 0.0,
+                    "n_copy_mb_s": 0.0,
+                    "n_core_utilization": 0.01821078868169211,
+                    "n_cpu_percent_c": 4.469224079745141,
+                    "n_cpu_percent_python": 0.6217289437411799,
+                    "n_gpu_avg_memory_mb": 0.0,
+                    "n_gpu_peak_memory_mb": 0.0,
+                    "n_gpu_percent": 0.0,
+                    "n_growth_mb": 0.0,
+                    "n_malloc_mb": 0.0,
+                    "n_mallocs": 0,
+                    "n_peak_mb": 0.0,
+                    "n_python_fraction": 0,
+                    "n_sys_percent": 14.613334385427352,
+                    "n_usage_fraction": 0,
                     "start_outermost_loop": 6,
                     "start_region_line": 6
                 },
                 {
                     "end_outermost_loop": 7,
                     "end_region_line": 7,
-                    "line": "\n",
+                    "line": "from pathlib import Path\n",
                     "lineno": 7,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -189,23 +211,23 @@
                 {
                     "end_outermost_loop": 8,
                     "end_region_line": 8,
-                    "line": "from fairy_orbit.icgen.generator import generate_system, orbital_period\n",
+                    "line": "\n",
                     "lineno": 8,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
                     "n_copy_mb_s": 0.0,
-                    "n_core_utilization": 0.018706373363119175,
-                    "n_cpu_percent_c": 0.6821090092416722,
-                    "n_cpu_percent_python": 0.3620673413984232,
+                    "n_core_utilization": 0.0,
+                    "n_cpu_percent_c": 0.0,
+                    "n_cpu_percent_python": 0.0,
                     "n_gpu_avg_memory_mb": 0.0,
                     "n_gpu_peak_memory_mb": 0.0,
-                    "n_gpu_percent": 0.0,
+                    "n_gpu_percent": 0,
                     "n_growth_mb": 0.0,
                     "n_malloc_mb": 0.0,
                     "n_mallocs": 0,
                     "n_peak_mb": 0.0,
                     "n_python_fraction": 0,
-                    "n_sys_percent": 3.216475278432592,
+                    "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 8,
                     "start_region_line": 8
@@ -213,7 +235,7 @@
                 {
                     "end_outermost_loop": 9,
                     "end_region_line": 9,
-                    "line": "from fairy_orbit.icgen.tetrahedron import escape_speed\n",
+                    "line": "ROOT = Path(__file__).resolve().parents[1]\n",
                     "lineno": 9,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -235,9 +257,9 @@
                     "start_region_line": 9
                 },
                 {
-                    "end_outermost_loop": 10,
+                    "end_outermost_loop": 11,
                     "end_region_line": 10,
-                    "line": "from fairy_orbit.simulation.simulator import simulate\n",
+                    "line": "if str(ROOT) not in sys.path:\n",
                     "lineno": 10,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -247,13 +269,13 @@
                     "n_cpu_percent_python": 0.0,
                     "n_gpu_avg_memory_mb": 0.0,
                     "n_gpu_peak_memory_mb": 0.0,
-                    "n_gpu_percent": 0.0,
+                    "n_gpu_percent": 0,
                     "n_growth_mb": 0.0,
                     "n_malloc_mb": 0.0,
                     "n_mallocs": 0,
                     "n_peak_mb": 0.0,
                     "n_python_fraction": 0,
-                    "n_sys_percent": 0.2110539506661393,
+                    "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 10,
                     "start_region_line": 10
@@ -261,23 +283,23 @@
                 {
                     "end_outermost_loop": 11,
                     "end_region_line": 11,
-                    "line": "from fairy_orbit.visualization.viewer import create_interactive_viewer\n",
+                    "line": "    sys.path.insert(0, str(ROOT))\n",
                     "lineno": 11,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
                     "n_copy_mb_s": 0.0,
-                    "n_core_utilization": 0.03507032905574675,
-                    "n_cpu_percent_c": 20.671135418308168,
-                    "n_cpu_percent_python": 17.7181160728356,
+                    "n_core_utilization": 0.0,
+                    "n_cpu_percent_c": 0.0,
+                    "n_cpu_percent_python": 0.0,
                     "n_gpu_avg_memory_mb": 0.0,
                     "n_gpu_peak_memory_mb": 0.0,
-                    "n_gpu_percent": 0.0,
+                    "n_gpu_percent": 0,
                     "n_growth_mb": 0.0,
                     "n_malloc_mb": 0.0,
                     "n_mallocs": 0,
                     "n_peak_mb": 0.0,
                     "n_python_fraction": 0,
-                    "n_sys_percent": 39.806237230660855,
+                    "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 11,
                     "start_region_line": 11
@@ -307,33 +329,33 @@
                     "start_region_line": 12
                 },
                 {
-                    "end_outermost_loop": 70,
-                    "end_region_line": 70,
-                    "line": "def main() -\\u003e None:\n",
+                    "end_outermost_loop": 13,
+                    "end_region_line": 13,
+                    "line": "from fairy_orbit.icgen.generator import generate_system, orbital_period\n",
                     "lineno": 13,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
                     "n_copy_mb_s": 0.0,
-                    "n_core_utilization": 0.0,
-                    "n_cpu_percent_c": 0.0,
-                    "n_cpu_percent_python": 0.0,
+                    "n_core_utilization": 0.020249373674862448,
+                    "n_cpu_percent_c": 0.8070924738735169,
+                    "n_cpu_percent_python": 0.20863614970880034,
                     "n_gpu_avg_memory_mb": 0.0,
                     "n_gpu_peak_memory_mb": 0.0,
-                    "n_gpu_percent": 0,
+                    "n_gpu_percent": 0.0,
                     "n_growth_mb": 0.0,
                     "n_malloc_mb": 0.0,
                     "n_mallocs": 0,
                     "n_peak_mb": 0.0,
                     "n_python_fraction": 0,
-                    "n_sys_percent": 0.0,
+                    "n_sys_percent": 2.1193332303407306,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 13,
                     "start_region_line": 13
                 },
                 {
                     "end_outermost_loop": 14,
-                    "end_region_line": 70,
-                    "line": "    parser = argparse.ArgumentParser(description=\"Quick Fairy Orbit Simulator\")\n",
+                    "end_region_line": 14,
+                    "line": "from fairy_orbit.icgen.tetrahedron import escape_speed\n",
                     "lineno": 14,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -352,60 +374,60 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 14,
-                    "start_region_line": 13
+                    "start_region_line": 14
                 },
                 {
                     "end_outermost_loop": 15,
-                    "end_region_line": 70,
-                    "line": "    parser.add_argument(\"--lnk\", type=float, default=0.0, help=\"ln(k) where k = exp(lnk)\")\n",
+                    "end_region_line": 15,
+                    "line": "from fairy_orbit.simulation.simulator import simulate\n",
                     "lineno": 15,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
                     "n_copy_mb_s": 0.0,
-                    "n_core_utilization": 0.0,
-                    "n_cpu_percent_c": 0.0,
-                    "n_cpu_percent_python": 0.0,
+                    "n_core_utilization": 0.026190582496184597,
+                    "n_cpu_percent_c": 0.36704037023302494,
+                    "n_cpu_percent_python": 0.04596983110550605,
                     "n_gpu_avg_memory_mb": 0.0,
                     "n_gpu_peak_memory_mb": 0.0,
-                    "n_gpu_percent": 0,
+                    "n_gpu_percent": 0.0,
                     "n_growth_mb": 0.0,
                     "n_malloc_mb": 0.0,
                     "n_mallocs": 0,
                     "n_peak_mb": 0.0,
                     "n_python_fraction": 0,
-                    "n_sys_percent": 0.0,
+                    "n_sys_percent": 0.8050036946113021,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 15,
-                    "start_region_line": 13
+                    "start_region_line": 15
                 },
                 {
                     "end_outermost_loop": 16,
-                    "end_region_line": 70,
-                    "line": "    parser.add_argument(\"--radius\", type=float, default=20.0, help=\"Initial orbital radius\")\n",
+                    "end_region_line": 16,
+                    "line": "from fairy_orbit.visualization.viewer import create_interactive_viewer\n",
                     "lineno": 16,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
                     "n_copy_mb_s": 0.0,
-                    "n_core_utilization": 0.0,
-                    "n_cpu_percent_c": 0.0,
-                    "n_cpu_percent_python": 0.0,
+                    "n_core_utilization": 0.022914693310145003,
+                    "n_cpu_percent_c": 7.715370256502528,
+                    "n_cpu_percent_python": 4.814756297431772,
                     "n_gpu_avg_memory_mb": 0.0,
                     "n_gpu_peak_memory_mb": 0.0,
-                    "n_gpu_percent": 0,
+                    "n_gpu_percent": 0.0,
                     "n_growth_mb": 0.0,
                     "n_malloc_mb": 0.0,
                     "n_mallocs": 0,
                     "n_peak_mb": 0.0,
                     "n_python_fraction": 0,
-                    "n_sys_percent": 0.0,
+                    "n_sys_percent": 25.83837031100369,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 16,
-                    "start_region_line": 13
+                    "start_region_line": 16
                 },
                 {
                     "end_outermost_loop": 17,
-                    "end_region_line": 70,
-                    "line": "    parser.add_argument(\"--alpha\", type=float, default=0.5, help=\"v_rad = alpha * escape_velocity\")\n",
+                    "end_region_line": 17,
+                    "line": "\n",
                     "lineno": 17,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -424,12 +446,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 17,
-                    "start_region_line": 13
+                    "start_region_line": 17
                 },
                 {
-                    "end_outermost_loop": 18,
-                    "end_region_line": 70,
-                    "line": "    parser.add_argument(\"--beta\", type=float, default=0.6, help=\"v_tan = beta * escape_velocity\")\n",
+                    "end_outermost_loop": 75,
+                    "end_region_line": 75,
+                    "line": "def main() -\\u003e None:\n",
                     "lineno": 18,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -448,12 +470,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 18,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 19,
-                    "end_region_line": 70,
-                    "line": "    parser.add_argument(\"--solver\", type=str, default=\"own\", choices=[\"own\", \"rebound\"], help=\"Solver/Integrator to use\")\n",
+                    "end_region_line": 75,
+                    "line": "    parser = argparse.ArgumentParser(description=\"Quick Fairy Orbit Simulator\")\n",
                     "lineno": 19,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -472,12 +494,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 19,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 20,
-                    "end_region_line": 70,
-                    "line": "    parser.add_argument(\"--n-periods\", type=float, default=5.0, help=\"Number of periods to simulate\")\n",
+                    "end_region_line": 75,
+                    "line": "    parser.add_argument(\"--lnk\", type=float, default=0.0, help=\"ln(k) where k = exp(lnk)\")\n",
                     "lineno": 20,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -496,12 +518,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 20,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 21,
-                    "end_region_line": 70,
-                    "line": "    parser.add_argument(\"--steps-per-period\", type=int, default=200, help=\"Number of integration steps per orbital period\")\n",
+                    "end_region_line": 75,
+                    "line": "    parser.add_argument(\"--radius\", type=float, default=20.0, help=\"Initial orbital radius\")\n",
                     "lineno": 21,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -520,12 +542,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 21,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 22,
-                    "end_region_line": 70,
-                    "line": "    parser.add_argument(\"--output-dir\", type=str, default=\".\", help=\"Directory to save output files\")\n",
+                    "end_region_line": 75,
+                    "line": "    parser.add_argument(\"--alpha\", type=float, default=0.5, help=\"v_rad = alpha * escape_velocity\")\n",
                     "lineno": 22,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -544,12 +566,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 22,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 23,
-                    "end_region_line": 70,
-                    "line": "    \n",
+                    "end_region_line": 75,
+                    "line": "    parser.add_argument(\"--beta\", type=float, default=0.6, help=\"v_tan = beta * escape_velocity\")\n",
                     "lineno": 23,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -568,12 +590,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 23,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 24,
-                    "end_region_line": 70,
-                    "line": "    args = parser.parse_args()\n",
+                    "end_region_line": 75,
+                    "line": "    parser.add_argument(\"--solver\", type=str, default=\"own\", choices=[\"own\", \"rebound\"], help=\"Solver/Integrator to use\")\n",
                     "lineno": 24,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -592,12 +614,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 24,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 25,
-                    "end_region_line": 70,
-                    "line": "    \n",
+                    "end_region_line": 75,
+                    "line": "    parser.add_argument(\"--n-periods\", type=float, default=5.0, help=\"Number of periods to simulate\")\n",
                     "lineno": 25,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -616,12 +638,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 25,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 26,
-                    "end_region_line": 70,
-                    "line": "    k = np.exp(args.lnk)\n",
+                    "end_region_line": 75,
+                    "line": "    parser.add_argument(\"--steps-per-period\", type=int, default=200, help=\"Number of integration steps per orbital period\")\n",
                     "lineno": 26,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -640,12 +662,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 26,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 27,
-                    "end_region_line": 70,
-                    "line": "    planet_mass = 1.0\n",
+                    "end_region_line": 75,
+                    "line": "    parser.add_argument(\"--output-dir\", type=str, default=\".\", help=\"Directory to save output files\")\n",
                     "lineno": 27,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -664,12 +686,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 27,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 28,
-                    "end_region_line": 70,
-                    "line": "    fairy_mass = k * planet_mass\n",
+                    "end_region_line": 75,
+                    "line": "    \n",
                     "lineno": 28,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -688,12 +710,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 28,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 29,
-                    "end_region_line": 70,
-                    "line": "    G = 1.0\n",
+                    "end_region_line": 75,
+                    "line": "    args, _ = parser.parse_known_args()\n",
                     "lineno": 29,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -712,11 +734,11 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 29,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 30,
-                    "end_region_line": 70,
+                    "end_region_line": 75,
                     "line": "    \n",
                     "lineno": 30,
                     "memory_samples": [],
@@ -736,12 +758,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 30,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 31,
-                    "end_region_line": 70,
-                    "line": "    vesc = escape_speed(G, planet_mass, args.radius)\n",
+                    "end_region_line": 75,
+                    "line": "    k = np.exp(args.lnk)\n",
                     "lineno": 31,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -760,12 +782,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 31,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 32,
-                    "end_region_line": 70,
-                    "line": "    v_rad = args.alpha * vesc\n",
+                    "end_region_line": 75,
+                    "line": "    planet_mass = 1.0\n",
                     "lineno": 32,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -784,12 +806,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 32,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 33,
-                    "end_region_line": 70,
-                    "line": "    v_tan = args.beta * vesc\n",
+                    "end_region_line": 75,
+                    "line": "    fairy_mass = k * planet_mass\n",
                     "lineno": 33,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -808,12 +830,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 33,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 34,
-                    "end_region_line": 70,
-                    "line": "    \n",
+                    "end_region_line": 75,
+                    "line": "    G = 1.0\n",
                     "lineno": 34,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -832,12 +854,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 34,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 35,
-                    "end_region_line": 70,
-                    "line": "    print(f\"Generating system with k={k:.6f} (lnk={args.lnk:.4f}), radius={args.radius:.2f}\")\n",
+                    "end_region_line": 75,
+                    "line": "    \n",
                     "lineno": 35,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -856,12 +878,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 35,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 36,
-                    "end_region_line": 70,
-                    "line": "    print(f\"Velocities: alpha={args.alpha:.4f} (v_rad={v_rad:.6f}), beta={args.beta:.4f} (v_tan={v_tan:.6f})\")\n",
+                    "end_region_line": 75,
+                    "line": "    vesc = escape_speed(G, planet_mass, args.radius)\n",
                     "lineno": 36,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -880,12 +902,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 36,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 37,
-                    "end_region_line": 70,
-                    "line": "    \n",
+                    "end_region_line": 75,
+                    "line": "    v_rad = args.alpha * vesc\n",
                     "lineno": 37,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -904,12 +926,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 37,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 38,
-                    "end_region_line": 70,
-                    "line": "    system = generate_system(\n",
+                    "end_region_line": 75,
+                    "line": "    v_tan = args.beta * vesc\n",
                     "lineno": 38,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -928,12 +950,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 38,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 39,
-                    "end_region_line": 70,
-                    "line": "        v_rad=v_rad,\n",
+                    "end_region_line": 75,
+                    "line": "    \n",
                     "lineno": 39,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -952,12 +974,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 39,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 40,
-                    "end_region_line": 70,
-                    "line": "        v_tan=v_tan,\n",
+                    "end_region_line": 75,
+                    "line": "    print(f\"Generating system with k={k:.6f} (lnk={args.lnk:.4f}), radius={args.radius:.2f}\")\n",
                     "lineno": 40,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -976,12 +998,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 40,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 41,
-                    "end_region_line": 70,
-                    "line": "        planet_mass=planet_mass,\n",
+                    "end_region_line": 75,
+                    "line": "    print(f\"Velocities: alpha={args.alpha:.4f} (v_rad={v_rad:.6f}), beta={args.beta:.4f} (v_tan={v_tan:.6f})\")\n",
                     "lineno": 41,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1000,12 +1022,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 41,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 42,
-                    "end_region_line": 70,
-                    "line": "        fairy_mass=fairy_mass,\n",
+                    "end_region_line": 75,
+                    "line": "    \n",
                     "lineno": 42,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1024,12 +1046,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 42,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 43,
-                    "end_region_line": 70,
-                    "line": "        radius=args.radius,\n",
+                    "end_region_line": 75,
+                    "line": "    system = generate_system(\n",
                     "lineno": 43,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1048,12 +1070,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 43,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 44,
-                    "end_region_line": 70,
-                    "line": "        G=G,\n",
+                    "end_region_line": 75,
+                    "line": "        v_rad=v_rad,\n",
                     "lineno": 44,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1072,12 +1094,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 44,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 45,
-                    "end_region_line": 70,
-                    "line": "    )\n",
+                    "end_region_line": 75,
+                    "line": "        v_tan=v_tan,\n",
                     "lineno": 45,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1096,12 +1118,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 45,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 46,
-                    "end_region_line": 70,
-                    "line": "    \n",
+                    "end_region_line": 75,
+                    "line": "        planet_mass=planet_mass,\n",
                     "lineno": 46,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1120,12 +1142,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 46,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 47,
-                    "end_region_line": 70,
-                    "line": "    period = orbital_period(G, planet_mass, args.radius)\n",
+                    "end_region_line": 75,
+                    "line": "        fairy_mass=fairy_mass,\n",
                     "lineno": 47,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1144,12 +1166,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 47,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 48,
-                    "end_region_line": 70,
-                    "line": "    dt = period / args.steps_per_period\n",
+                    "end_region_line": 75,
+                    "line": "        radius=args.radius,\n",
                     "lineno": 48,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1168,12 +1190,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 48,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 49,
-                    "end_region_line": 70,
-                    "line": "    t_end = args.n_periods * period\n",
+                    "end_region_line": 75,
+                    "line": "        G=G,\n",
                     "lineno": 49,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1192,12 +1214,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 49,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 50,
-                    "end_region_line": 70,
-                    "line": "    \n",
+                    "end_region_line": 75,
+                    "line": "    )\n",
                     "lineno": 50,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1216,12 +1238,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 50,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 51,
-                    "end_region_line": 70,
-                    "line": "    print(f\"Running simulation with solver '{args.solver}' for {args.n_periods} periods (t_end={t_end:.2f}, dt={dt:.6f})...\")\n",
+                    "end_region_line": 75,
+                    "line": "    \n",
                     "lineno": 51,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1240,12 +1262,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 51,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 52,
-                    "end_region_line": 70,
-                    "line": "    \n",
+                    "end_region_line": 75,
+                    "line": "    period = orbital_period(G, planet_mass, args.radius)\n",
                     "lineno": 52,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1264,12 +1286,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 52,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 53,
-                    "end_region_line": 70,
-                    "line": "    trajectory = simulate(\n",
+                    "end_region_line": 75,
+                    "line": "    dt = period / args.steps_per_period\n",
                     "lineno": 53,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1288,12 +1310,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 53,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 54,
-                    "end_region_line": 70,
-                    "line": "        system=system,\n",
+                    "end_region_line": 75,
+                    "line": "    t_end = args.n_periods * period\n",
                     "lineno": 54,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1312,12 +1334,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 54,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 55,
-                    "end_region_line": 70,
-                    "line": "        dt=dt,\n",
+                    "end_region_line": 75,
+                    "line": "    \n",
                     "lineno": 55,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1336,12 +1358,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 55,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 56,
-                    "end_region_line": 70,
-                    "line": "        t_end=t_end,\n",
+                    "end_region_line": 75,
+                    "line": "    print(f\"Running simulation with solver '{args.solver}' for {args.n_periods} periods (t_end={t_end:.2f}, dt={dt:.6f})...\")\n",
                     "lineno": 56,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1360,12 +1382,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 56,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 57,
-                    "end_region_line": 70,
-                    "line": "        solver_type=args.solver,\n",
+                    "end_region_line": 75,
+                    "line": "    \n",
                     "lineno": 57,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1384,36 +1406,36 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 57,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 58,
-                    "end_region_line": 70,
-                    "line": "        record_every=1,\n",
+                    "end_region_line": 75,
+                    "line": "    trajectory = simulate(\n",
                     "lineno": 58,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
                     "n_copy_mb_s": 0.0,
-                    "n_core_utilization": 0.0,
-                    "n_cpu_percent_c": 0.0,
-                    "n_cpu_percent_python": 0.0,
+                    "n_core_utilization": 0.04895684633389778,
+                    "n_cpu_percent_c": 4.387411580613393,
+                    "n_cpu_percent_python": 3.5007769065650587,
                     "n_gpu_avg_memory_mb": 0.0,
                     "n_gpu_peak_memory_mb": 0.0,
-                    "n_gpu_percent": 0,
+                    "n_gpu_percent": 0.0,
                     "n_growth_mb": 0.0,
                     "n_malloc_mb": 0.0,
                     "n_mallocs": 0,
                     "n_peak_mb": 0.0,
                     "n_python_fraction": 0,
-                    "n_sys_percent": 0.0,
+                    "n_sys_percent": 3.7962717737942056,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 58,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 59,
-                    "end_region_line": 70,
-                    "line": "    )\n",
+                    "end_region_line": 75,
+                    "line": "        system=system,\n",
                     "lineno": 59,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1432,12 +1454,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 59,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 60,
-                    "end_region_line": 70,
-                    "line": "    \n",
+                    "end_region_line": 75,
+                    "line": "        dt=dt,\n",
                     "lineno": 60,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1456,12 +1478,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 60,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 61,
-                    "end_region_line": 70,
-                    "line": "    out_dir = Path(args.output_dir)\n",
+                    "end_region_line": 75,
+                    "line": "        t_end=t_end,\n",
                     "lineno": 61,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1480,12 +1502,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 61,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 62,
-                    "end_region_line": 70,
-                    "line": "    out_dir.mkdir(parents=True, exist_ok=True)\n",
+                    "end_region_line": 75,
+                    "line": "        solver_type=args.solver,\n",
                     "lineno": 62,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1504,12 +1526,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 62,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 63,
-                    "end_region_line": 70,
-                    "line": "    \n",
+                    "end_region_line": 75,
+                    "line": "        record_every=1,\n",
                     "lineno": 63,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1528,12 +1550,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 63,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 64,
-                    "end_region_line": 70,
-                    "line": "    npy_path = out_dir / \"trajectory.npy\"\n",
+                    "end_region_line": 75,
+                    "line": "    )\n",
                     "lineno": 64,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1552,12 +1574,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 64,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 65,
-                    "end_region_line": 70,
-                    "line": "    np.save(npy_path, trajectory.positions)\n",
+                    "end_region_line": 75,
+                    "line": "    \n",
                     "lineno": 65,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1576,12 +1598,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 65,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 66,
-                    "end_region_line": 70,
-                    "line": "    print(f\"Saved trajectory data to {npy_path}\")\n",
+                    "end_region_line": 75,
+                    "line": "    out_dir = Path(args.output_dir)\n",
                     "lineno": 66,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1600,12 +1622,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 66,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 67,
-                    "end_region_line": 70,
-                    "line": "    \n",
+                    "end_region_line": 75,
+                    "line": "    out_dir.mkdir(parents=True, exist_ok=True)\n",
                     "lineno": 67,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1624,12 +1646,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 67,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 68,
-                    "end_region_line": 70,
-                    "line": "    html_path = out_dir / \"orbit.html\"\n",
+                    "end_region_line": 75,
+                    "line": "    \n",
                     "lineno": 68,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1648,12 +1670,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 68,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 69,
-                    "end_region_line": 70,
-                    "line": "    create_interactive_viewer(trajectory.positions, trajectory.labels, str(html_path))\n",
+                    "end_region_line": 75,
+                    "line": "    npy_path = out_dir / \"trajectory.npy\"\n",
                     "lineno": 69,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1672,12 +1694,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 69,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 70,
-                    "end_region_line": 70,
-                    "line": "    print(f\"Saved interactive 3D viewer to {html_path}\")\n",
+                    "end_region_line": 75,
+                    "line": "    np.save(npy_path, trajectory.positions)\n",
                     "lineno": 70,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1696,12 +1718,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 70,
-                    "start_region_line": 13
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 71,
-                    "end_region_line": 71,
-                    "line": "\n",
+                    "end_region_line": 75,
+                    "line": "    print(f\"Saved trajectory data to {npy_path}\")\n",
                     "lineno": 71,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1720,12 +1742,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 71,
-                    "start_region_line": 71
+                    "start_region_line": 18
                 },
                 {
-                    "end_outermost_loop": 73,
-                    "end_region_line": 72,
-                    "line": "if __name__ == \"__main__\":\n",
+                    "end_outermost_loop": 72,
+                    "end_region_line": 75,
+                    "line": "    \n",
                     "lineno": 72,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1744,12 +1766,12 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 72,
-                    "start_region_line": 72
+                    "start_region_line": 18
                 },
                 {
                     "end_outermost_loop": 73,
-                    "end_region_line": 73,
-                    "line": "    main()\n",
+                    "end_region_line": 75,
+                    "line": "    html_path = out_dir / \"orbit.html\"\n",
                     "lineno": 73,
                     "memory_samples": [],
                     "n_avg_mb": 0.0,
@@ -1768,7 +1790,127 @@
                     "n_sys_percent": 0.0,
                     "n_usage_fraction": 0,
                     "start_outermost_loop": 73,
-                    "start_region_line": 73
+                    "start_region_line": 18
+                },
+                {
+                    "end_outermost_loop": 74,
+                    "end_region_line": 75,
+                    "line": "    create_interactive_viewer(trajectory.positions, trajectory.labels, str(html_path))\n",
+                    "lineno": 74,
+                    "memory_samples": [],
+                    "n_avg_mb": 0.0,
+                    "n_copy_mb_s": 0.0,
+                    "n_core_utilization": 0.023197318420283743,
+                    "n_cpu_percent_c": 5.395967174759243,
+                    "n_cpu_percent_python": 3.705538595307978,
+                    "n_gpu_avg_memory_mb": 0.0,
+                    "n_gpu_peak_memory_mb": 0.0,
+                    "n_gpu_percent": 0.0,
+                    "n_growth_mb": 0.0,
+                    "n_malloc_mb": 0.0,
+                    "n_mallocs": 0,
+                    "n_peak_mb": 0.0,
+                    "n_python_fraction": 0,
+                    "n_sys_percent": 16.788173945235172,
+                    "n_usage_fraction": 0,
+                    "start_outermost_loop": 74,
+                    "start_region_line": 18
+                },
+                {
+                    "end_outermost_loop": 75,
+                    "end_region_line": 75,
+                    "line": "    print(f\"Saved interactive 3D viewer to {html_path}\")\n",
+                    "lineno": 75,
+                    "memory_samples": [],
+                    "n_avg_mb": 0.0,
+                    "n_copy_mb_s": 0.0,
+                    "n_core_utilization": 0.0,
+                    "n_cpu_percent_c": 0.0,
+                    "n_cpu_percent_python": 0.0,
+                    "n_gpu_avg_memory_mb": 0.0,
+                    "n_gpu_peak_memory_mb": 0.0,
+                    "n_gpu_percent": 0,
+                    "n_growth_mb": 0.0,
+                    "n_malloc_mb": 0.0,
+                    "n_mallocs": 0,
+                    "n_peak_mb": 0.0,
+                    "n_python_fraction": 0,
+                    "n_sys_percent": 0.0,
+                    "n_usage_fraction": 0,
+                    "start_outermost_loop": 75,
+                    "start_region_line": 18
+                },
+                {
+                    "end_outermost_loop": 76,
+                    "end_region_line": 76,
+                    "line": "\n",
+                    "lineno": 76,
+                    "memory_samples": [],
+                    "n_avg_mb": 0.0,
+                    "n_copy_mb_s": 0.0,
+                    "n_core_utilization": 0.0,
+                    "n_cpu_percent_c": 0.0,
+                    "n_cpu_percent_python": 0.0,
+                    "n_gpu_avg_memory_mb": 0.0,
+                    "n_gpu_peak_memory_mb": 0.0,
+                    "n_gpu_percent": 0,
+                    "n_growth_mb": 0.0,
+                    "n_malloc_mb": 0.0,
+                    "n_mallocs": 0,
+                    "n_peak_mb": 0.0,
+                    "n_python_fraction": 0,
+                    "n_sys_percent": 0.0,
+                    "n_usage_fraction": 0,
+                    "start_outermost_loop": 76,
+                    "start_region_line": 76
+                },
+                {
+                    "end_outermost_loop": 78,
+                    "end_region_line": 77,
+                    "line": "if __name__ == \"__main__\":\n",
+                    "lineno": 77,
+                    "memory_samples": [],
+                    "n_avg_mb": 0.0,
+                    "n_copy_mb_s": 0.0,
+                    "n_core_utilization": 0.0,
+                    "n_cpu_percent_c": 0.0,
+                    "n_cpu_percent_python": 0.0,
+                    "n_gpu_avg_memory_mb": 0.0,
+                    "n_gpu_peak_memory_mb": 0.0,
+                    "n_gpu_percent": 0,
+                    "n_growth_mb": 0.0,
+                    "n_malloc_mb": 0.0,
+                    "n_mallocs": 0,
+                    "n_peak_mb": 0.0,
+                    "n_python_fraction": 0,
+                    "n_sys_percent": 0.0,
+                    "n_usage_fraction": 0,
+                    "start_outermost_loop": 77,
+                    "start_region_line": 77
+                },
+                {
+                    "end_outermost_loop": 78,
+                    "end_region_line": 78,
+                    "line": "    main()\n",
+                    "lineno": 78,
+                    "memory_samples": [],
+                    "n_avg_mb": 0.0,
+                    "n_copy_mb_s": 0.0,
+                    "n_core_utilization": 0.0,
+                    "n_cpu_percent_c": 0.0,
+                    "n_cpu_percent_python": 0.0,
+                    "n_gpu_avg_memory_mb": 0.0,
+                    "n_gpu_peak_memory_mb": 0.0,
+                    "n_gpu_percent": 0,
+                    "n_growth_mb": 0.0,
+                    "n_malloc_mb": 0.0,
+                    "n_mallocs": 0,
+                    "n_peak_mb": 0.0,
+                    "n_python_fraction": 0,
+                    "n_sys_percent": 0.0,
+                    "n_usage_fraction": 0,
+                    "start_outermost_loop": 78,
+                    "start_region_line": 78
                 }
             ],
             "percent_cpu_time": 100.0

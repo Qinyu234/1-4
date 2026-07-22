@@ -1,142 +1,2017 @@
-# Architecture Review: Event-Driven Hierarchical Simulator for PEO Discovery
-
-## 0. 总体判断
-
-这个方向是对的，而且不是新发明——它本质上是**混合辛积分器（hybrid symplectic integrator）**思路在"轨道搜索"场景下的再表达。REBOUND 的 `mercurius`、Chambers 的 MERCURY、行星子星盘模拟里常见的"drift-close encounter-drift"结构，都是同一个物理直觉的软件实现：大部分时间是解耦的 Kepler 漂移，只有近距离交会才值得上贵的直接积分。
-
-你现在做的新东西，是把这个"省算力的工程技巧"**提升为研究对象本身**——不是为了积分更快，而是因为你怀疑：真正周期性重复的东西，是交会结构（event 序列），而不是笛卡尔状态。这个转变是合理的，但也带来一个这份文档目前还没讲清楚的核心风险，我放在第 5 节重点谈。
+下面是一个**假设代码库为空，从零设计实现的 Agent Prompt**。目标不是让 Agent 立即写完整模拟器，而是让它按照架构决策逐步建立项目骨架，避免过早实现 Encke、archive、search 等复杂部分。
 
 ---
 
-## 1. 关键问题：EventTimeline 应该是比 State 更高层的对象吗？
+# Prompt: Build Event-Driven Hierarchical Simulator Architecture for Periodic Encounter Orbit Discovery (Empty Repository)
 
-答案是：**数据依赖方向和"研究优先级方向"应该分开看，这是两条不同的箭头。**
+## Role
 
-- **数据流方向（生成关系）**：`State → Trajectory → Event`。Event 永远是从连续状态推导出来的，不能反过来。Trajectory（不管是纯 Kepler 段还是局部 N-body 段拼起来的）是唯一的物理 ground truth，任何 Event 都必须能追溯到产生它的那一段状态。
-- **使用/研究方向（查询优先级）**：`Event 优先于 Trajectory`。当你做周期性判定、做 archive 检索、做候选轨道去重时，你应该先在 Event 序列这一层做比较，只有需要复核物理有效性时才回落到 Trajectory。
+你是一名资深科学计算软件架构师和天体动力学工程师。
 
-所以准确的说法不是"EventTimeline 取代 State 成为核心"，而是：
+当前代码库为空。
 
-> **Trajectory 是生成层的真值（ground truth），EventTimeline 是研究层的索引（index）。二者不是替代关系，是"存储 vs 检索"的关系。**
+你的任务不是快速写一个能运行的 N-body 模拟器，而是从零建立一个**可演进的 Event-Driven Hierarchical Simulator**，用于研究：
 
-这个区分很重要，因为如果把 EventTimeline 当成唯一真值，你会丢失复核能力（比如发现"周期性"其实是离散化伪影时，没法回去看原始轨迹）；如果把 Trajectory 当成唯一真值又不给 Event 一等公民地位，你会退化回"周期性只能在连续状态上算"的老范式，白做了这次架构转型。
+> Periodic Encounter Orbits (PEO)
 
----
+核心目标：
 
-## 2. 这份设计文档目前最大的一个缺口
-
-你在第 12 节问"周期性应该在 trajectory 上算还是 event 上算"，但整份文档没有回答一个更前置的问题：
-
-> **"Event(t+T) ≈ Event(t)" 里的这个 "≈" 具体是什么？**
-
-这不是细节问题，是整个架构能不能成立的关键。可能的定义至少有四种，选哪种会导致完全不同的实现：
-
-| 相似性定义 | 含义 | 风险 |
-|---|---|---|
-| 参与者集合相同 | 同样几个天体发生交会 | 太粗，容易把物理上完全不同的交会误判为"重复" |
-| 交会几何类型相同 | 同样的接近距离量级、相对速度方向 | 需要定义几何分箱（binning），分箱粒度本身就是自由参数 |
-| η 曲线形状相似 | 扰动强度随时间的轮廓相近 | 计算量大，但物理意义最强 |
-| 子系统跃迁序列相同（符号动力学） | 类似三体问题里对周期轨道做符号分类（如 Broucke 的工作） | 优雅，但符号表的粒度选择依然是隐藏参数 |
-
-**建议**：不要在架构里"预先决定"用哪种相似性度量，而是把它做成一个显式的、可替换的 `EventSimilarity` 策略接口，在 Stage 1（只加事件记录、不改变力学）阶段，用你已有的已知混沌三体/四体测试用例，对这四种定义做敏感性扫描——看你关心的"周期性结论"在哪种定义下稳定、哪种下一致性差。这比现在就把 EventTimeline 焊死成某一种数据结构更重要。
-
-这也直接回答你在第 4 节问的"trajectory 是否只是验证artifact"：不完全是——trajectory 还承担着"当相似性度量选错时的复核数据源"这个角色，不能被丢弃或降级为纯粹的可选项。
+发现长期重复的 encounter structure，而不是传统意义上的 periodic orbit。
 
 ---
 
-## 3. 逐条设计判断
+# 1. Project Objective
 
-### 3.1 State-driven vs Time-driven（第3节）
-判断：**方向正确，但"predict next event → jump directly"这一步有个隐藏假设**——即预测本身是廉价且可靠的。对于三体以上的近距交会，"下一次交会何时发生"的预测本身在临界区域（η 接近阈值时）是病态的（ill-conditioned），预测误差会随时间指数放大。建议不要把"预测"做成一次性的解析跳跃，而是做成"粗预测 + 细化"两步：先用解析近似给出一个时间窗口，再在窗口内用低成本采样确认，而不是直接跳到预测时刻——否则会在阈值附近反复"跳过头又跳回来"。
+建立一个研究型天体动力学模拟框架：
 
-### 3.2 Reference vs Research Simulator（第4节）
-判断：**分离正确，而且应该更彻底**——Reference Simulator（REBOUND）不应该依赖 events/、hierarchy/ 任何模块，只依赖 core/ 和 dynamics/。这样它才能始终作为独立的、不被你自己架构里的 bug 污染的真值来源。第13节的模块边界目前没有强制这条依赖规则，建议加上。
+模拟：
 
-### 3.3 Kepler 作为默认状态（第6节）
-优势成立。但"累积相位误差"不只是"potential issue"，它是**必须有监控机制的一等公民问题**：建议每个 Subsystem 折叠回 Kepler 时，强制做一次"refit 残差"记录（refit 前后椭圆根数的差异），这个残差本身应该进入 Event/统计流，而不是被丢弃——因为如果某条候选轨道的"周期性"恰好靠误差累积凑出来的，你需要能在事后查出来。Kepler 表示应该活在 `dynamics/kepler` 里，作为一个**状态层（state representation）**而不是"近似层"——因为它在架构里和 N-body 状态是平权的两种表示，不是"精确 vs 近似"的从属关系，这样后面替换积分器时接口更干净。
+* 一个中心天体
+* 多个小质量伴星(fairy bodies)
 
-### 3.4 Prediction/Validation 分离（第7节）
-判断正确，且这个分离本身就是防止"过早优化"的好设计——η 阈值可以在不改动预测逻辑的情况下单独调参。风险点：**pairwise 预测无法捕捉"三体同时近距"的情况**（A-B、A-C、B-C 各自都低于阈值，但 A、B、C 同时挤在一起时联合扰动超过阈值）。建议 validation 阶段除了 pairwise η，再加一个"局部密度/联合扰动"检查，否则会系统性漏掉某一类交会。
+寻找：
 
-### 3.5 Subsystem 而非 TwoPlusOneSolver（第8节）
-这是文档里最好的一个决定，明确支持。`Subsystem(members=[...])` 用显式列表就够了，**不需要一开始做成隐式/涌现的图结构**——等你真的遇到"子系统需要合并/重叠"这种显式列表表达不了的情况时再重构，现在做是过度设计。
+长期稳定：
 
-### 3.6 状态机 vs 编译器式 lowering pipeline（第9节）
-判断：**用简单的显式 FSM + 滞回（hysteresis）就够，不要做"compiler-like lowering pipeline"**。lowering pipeline 这个隐喻意味着"多阶段、可组合、可插入新pass"，但你目前只有一种跃迁逻辑（基于η的扩张/收缩），没有第二个需要复用的 pipeline 场景。这是本文档里第二明显的过度设计信号（第一个是原来的 TwoPlusOneSolver/ThreePlusOneSolver，已经被你自己纠正了）。
+* encounter sequence
+* interaction pattern
+* repeating event structure
 
-### 3.7 跃迁稳定性（第10节）
-滞回思路正确。补充一点：跃迁不应该只由触发跃迁的那一对天体的η决定——**子系统成员变化后，必须让所有涉及旧成员的"待验证预测"失效并重新计算**，否则会出现"用过期预测触发的跃迁"这种难以复现的 bug（这是软件风险，不是物理风险，但很容易在调试时把两者混淆）。
+研究对象：
 
----
-
-## 4. 模块边界修订建议（对第13节）
+不是：
 
 ```
-core/            body, state, configuration        [无变化]
+State(t+T)=State(t)
+```
 
-dynamics/        kepler, nbody                      [无变化，两者应平权]
+而是：
+
+```
+EventTimeline(t+T) ≈ EventTimeline(t)
+```
+
+---
+
+# 2. Core Design Philosophy
+
+必须遵守：
+
+## Physics truth
+
+Trajectory 是唯一物理真值。
+
+数据流：
+
+```
+State
+  |
+  v
+Trajectory
+  |
+  v
+EventTimeline
+```
+
+## Research representation
+
+EventTimeline 是搜索索引。
+
+用途：
+
+* periodicity detection
+* candidate ranking
+* archive retrieval
+
+禁止：
+
+把 EventTimeline 当成 State 替代品。
+
+---
+
+# 3. Design Constraints
+
+当前目标：
+
+建立正确架构。
+
+不要：
+
+* 追求最大性能
+* 实现复杂搜索
+* 实现 GPU
+* 实现自定义积分器
+
+优先：
+
+* 模块边界
+* 可验证
+* 可替换
+* 可扩展
+
+---
+
+# 4. Recommended Repository Structure
+
+创建：
+
+```
+peo_simulator/
+
+
+core/
+
+    body.py
+    state.py
+    configuration.py
+
+
+dynamics/
+
+    kepler/
+        propagator.py
+        elements.py
+
+    nbody/
+        integrator.py
+
+
+    perturbation/
+        README.md
+        # placeholder only
+        # future Encke/Gauss correction
+
 
 events/
-    predictor
-    detector
-    timeline
-    similarity       <-- 新增：显式的 Event 相似性策略，见第2节
 
-hierarchy/       subsystem, transition              [无变化]
+    detector.py
+    predictor.py
+    timeline.py
 
-simulation/      runner                             [无变化]
+    similarity.py
 
-evaluation/      geometry, periodicity, energy_stability, encounter_pattern
-                                                     <-- 明确列出评估器，依赖 events/ + core/，不依赖 hierarchy/
+    symbolic/
+        normalize.py
+        periodicity.py
 
-verification/    benchmark
-                 <-- 依赖规则：只能依赖 core/ + dynamics/，禁止依赖 events/ hierarchy/
 
-archive/         candidate_store, refit_residual_log
-                                                     <-- 新增，但 Stage 1-2 阶段先留空/占位，不要提前实现完整schema
+hierarchy/
+
+    subsystem.py
+    transition.py
+
+
+simulation/
+
+    runner.py
+
+
+evaluation/
+
+    periodicity/
+        symbolic_match.py
+        spectral_score.py
+
+    geometry.py
+    energy.py
+
+
+verification/
+
+    reference_runner.py
+    benchmarks/
+
+
+archive/
+
+    README.md
+
+
+tests/
+
+configs/
+
+docs/
 ```
 
-依赖方向：`core → dynamics → events → hierarchy → simulation`；`evaluation` 和 `verification` 都只向左依赖，不向右依赖，二者互相之间也不应该有依赖。
+---
+
+# 5. Dependency Rules
+
+严格：
+
+```
+core
+ |
+ v
+dynamics
+ |
+ v
+events
+ |
+ v
+hierarchy
+ |
+ v
+simulation
+```
+
+evaluation：
+
+只能：
+
+```
+evaluation
+    |
+    v
+events
+    |
+    v
+dynamics/core
+```
+
+verification：
+
+只能：
+
+```
+verification
+       |
+       v
+core + dynamics
+```
+
+禁止：
+
+```
+verification -> events
+verification -> hierarchy
+```
+
+原因：
+
+Reference simulator 必须独立。
 
 ---
 
-## 5. 过度设计 / 应推迟的部分（回答第15节问题4、5）
+# 6. State Model
 
-**现在就该砍掉或推迟的：**
-- `events/` 里现在没有但很容易被诱惑先做的"通用事件相似性框架"——先用最简单的"参与者集合+η峰值"两个字段做 baseline，等 Stage 1 的敏感性扫描结果出来后再决定要不要上更复杂的度量。
-- Section 9 的 lowering pipeline 隐喻——用显式 FSM。
-- Section 11 的完整 archive schema（trajectory/parameters/event序列/稳定性指标全部存）——在你不知道"周期性判定"这件事本身是否可靠之前，存什么字段都是猜的。先只存 event 序列 + 触发它的随机种子/初始条件，能复现就够，其余字段等 Stage 2 有信号后再加。
-- Stage 4 的自定义子系统积分器——REBOUND 的 IAS15 已经是成熟的近距交会积分器，没有证据表明它是瓶颈之前不要重新发明。
+设计基础对象：
 
-**应该保留、且是本次架构真正新东西的：**
-- Event 作为一等对象（但明确它是"索引"不是"替代真值"）
-- Subsystem 的显式列表表示
-- Kepler/N-body 的平权状态表示
+## Body
 
----
+包含：
 
-## 6. 演进路线评估（对第14节）
+```
+id
 
-Stage 1→5 的顺序是合理的，风险从低到高排列正确。唯一建议的调整：**把"Event相似性度量的敏感性扫描"明确插入 Stage 1 的验收标准里**，作为进入 Stage 2 的门槛（gate），而不是让它隐含在"验证事件表示是否有意义"这句模糊的话里。也就是说 Stage 1 的 Definition of Done 应该是：
+mass
 
-> 对至少 3-4 个已知混沌测试用例，在至少 3 种不同 η 阈值 / 相似性定义下，事件序列的"看起来周期"的结论是否稳定。如果结论随参数剧烈翻转，说明需要先解决第2节的问题，再进入 Stage 2。
+radius
+
+initial condition
+```
 
 ---
 
-## 7. 风险清单（对第15节问题6、7）
+## State
 
-**科学风险**
-1. **符号化伪周期（symbolic aliasing）**——最大风险，见第2节。
-2. Kepler 折叠相位误差在长时间尺度上悄悄累积，导致真实存在的共振被"折叠掉"（假阴性）——需要第3.3节提到的 refit 残差监控。
-3. Pairwise 预测漏掉三体同时近距——见3.4节。
+包含：
 
-**软件风险**
-1. 混合模拟器产出的 trajectory 是异构的（Kepler 段 + N-body 段拼接），下游 evaluator/绘图/与 REBOUND 对比都需要统一的重采样/插值策略，否则"验证"这一步本身会引入新的数值误差来源，污染判断。
-2. 跃迁触发后旧预测未失效导致的调试困难（见3.7节）。
-3. 一旦 archive/search（Stage 5）在 Stage 1-2 结论还不稳固时提前实现，会产生大量基于不可靠周期性判据的"候选轨道"，浪费后续精修算力——这是纯工程风险但代价是研究时间。
+```
+time
+
+positions
+
+velocities
+```
 
 ---
 
-## 结论
+## Configuration
 
-架构方向本质正确，且已经做对了最关键的两件事:把 Subsystem 做成统一抽象、把 Reference/Research 模拟器分离。真正决定这次转型成不成立的,不是代码结构,而是第2节那个还没回答的问题——"事件相似性"到底怎么定义。建议把 Stage 1 的目标从"验证事件记录是否有意义"收紧为"对相似性度量做敏感性分析",这是这份文档里唯一一个会直接决定后面所有工作是否白做的判断点。
+显式保存：
+
+```
+G
+
+central_mass
+
+mass_ratio
+
+central_radius
+
+canonical_units
+```
+
+不要隐藏物理假设。
+
+---
+
+# 7. Dynamics Layer
+
+实现两个平等状态表示。
+
+不是：
+
+```
+accurate
+   |
+   v
+approximate
+```
+
+而是：
+
+```
+State Representation
+
+    |
+    +---- Kepler
+    |
+    +---- N-body
+```
+
+---
+
+# 8. Kepler Dynamics
+
+实现：
+
+* orbital elements
+* propagation
+* state conversion
+
+Kepler 是默认长期传播方式。
+
+---
+
+# 9. N-body Dynamics
+
+初期：
+
+只需要接口。
+
+允许：
+
+未来接入：
+
+* REBOUND
+* IAS15
+* other integrators
+
+不要现在写自己的高精度积分器。
+
+---
+
+# 10. Event Driven Architecture
+
+核心流程：
+
+```
+Kepler propagation
+
+        |
+        v
+
+Encounter prediction
+
+        |
+        v
+
+Validation
+
+        |
+        +----------------+
+        |                |
+        v                v
+
+stay Kepler       create Subsystem
+
+
+        |
+        v
+
+local N-body
+
+
+        |
+        v
+
+Kepler refit
+```
+
+---
+
+# 11. Encounter Decision
+
+必须三分支：
+
+```
+collision
+    |
+    v
+r < Ri + Rj
+
+
+
+weak perturbation
+    |
+    v
+future Encke correction
+
+
+
+strong encounter
+    |
+    v
+Subsystem N-body
+```
+
+具体：
+
+```
+η < epsilon
+
+        pure Kepler
+
+
+epsilon <= η < threshold
+
+        perturbation placeholder
+
+
+η >= threshold
+
+        subsystem
+```
+
+---
+
+# 12. Subsystem Model
+
+不要设计：
+
+```
+TwoPlusOneSolver
+ThreePlusOneSolver
+```
+
+统一：
+
+```python
+Subsystem(
+    members=[body_ids]
+)
+```
+
+原因：
+
+未来可能：
+
+* 2+1
+* 3+1
+* 4+1
+* overlapping subsystem
+
+---
+
+# 13. Transition System
+
+使用：
+
+```
+finite state machine
++
+hysteresis
+```
+
+不要：
+
+compiler-style lowering pipeline。
+
+状态：
+
+```
+KEPLER
+
+SUBSYSTEM
+```
+
+transition 后：
+
+必须：
+
+invalidate old predictions。
+
+---
+
+# 14. Event Model
+
+设计：
+
+```
+Event
+```
+
+包含：
+
+```
+time
+
+participants
+
+distance
+
+relative_velocity
+
+geometry_descriptor
+
+eta
+
+event_type
+```
+
+EventTimeline:
+
+```
+[
+ Event,
+ Event,
+ Event
+]
+```
+
+---
+
+# 15. Event Similarity
+
+不要提前固定。
+
+设计接口：
+
+```python
+class EventSimilarity:
+
+    compare(
+        timeline_a,
+        timeline_b
+    )
+```
+
+未来支持：
+
+* participant similarity
+* geometry similarity
+* eta curve similarity
+* symbolic dynamics
+
+---
+
+# 16. Symbolic Periodicity
+
+实现基础工具：
+
+输入：
+
+```
+ABCABCABC
+```
+
+处理：
+
+## Step 1
+
+Run-length folding:
+
+```
+AABBCC
+```
+
+↓
+
+```
+ABC
+```
+
+## Step 2
+
+Cyclic canonicalization:
+
+```
+ABC
+BCA
+CAB
+```
+
+↓
+
+same class
+
+使用：
+
+* Booth algorithm
+
+## Step 3
+
+周期检测：
+
+使用：
+
+* KMP
+
+注意：
+
+保留：
+
+* 原始 run length
+* duration
+
+不要丢失物理信息。
+
+---
+
+# 17. Spectral Periodicity
+
+预留：
+
+```
+evaluation/periodicity
+```
+
+支持：
+
+未来：
+
+* Lomb-Scargle
+* epoch folding
+
+不要直接 FFT。
+
+原因：
+
+Event 是 irregular sampling。
+
+---
+
+# 18. Escape / Collision Rules
+
+删除：
+
+所有固定距离逃逸规则。
+
+禁止：
+
+```
+escape_distance = constant * a
+```
+
+使用：
+
+能量判据：
+
+[
+E=v^2/2-GM/r
+]
+
+逃逸：
+
+```
+E >= 0
+```
+
+等价：
+
+```
+a <= 0
+```
+
+---
+
+# 19. Outer Box
+
+outer box 只是：
+
+simulation truncation。
+
+用途：
+
+控制：
+
+* runtime
+* maximum region
+
+不能：
+
+进入：
+
+* score
+* similarity
+* physics evaluation
+
+---
+
+# 20. Weak Perturbation Future Extension
+
+创建：
+
+```
+dynamics/perturbation/
+```
+
+但当前不要实现。
+
+目标：
+
+未来支持：
+
+* Encke method
+* Gauss planetary equations
+* variation of parameters
+
+作用：
+
+处理：
+
+```
+small but persistent perturbation
+```
+
+避免：
+
+长期 secular drift。
+
+---
+
+# 21. Refitting Requirement
+
+任何：
+
+```
+Subsystem
+      |
+      v
+Kepler
+```
+
+必须记录：
+
+```
+refit residual
+
+delta_a
+
+delta_e
+
+delta_phase
+```
+
+原因：
+
+避免：
+
+数值误差产生假周期。
+
+---
+
+# 22. Development Phases
+
+## Phase 0
+
+创建：
+
+* package structure
+* interfaces
+* tests
+
+没有物理优化。
+
+---
+
+## Phase 1
+
+目标：
+
+EventTimeline 验证。
+
+实现：
+
+* simple Kepler propagation
+* event detection
+* event storage
+
+Definition of Done:
+
+可以生成：
+
+```
+Trajectory
+
++
+
+EventTimeline
+```
+
+---
+
+## Phase 2
+
+加入：
+
+Kepler / N-body switching。
+
+---
+
+## Phase 3
+
+加入：
+
+Subsystem FSM。
+
+---
+
+## Phase 4
+
+加入：
+
+weak perturbation correction。
+
+---
+
+## Phase 5
+
+加入：
+
+search/archive。
+
+---
+
+# 23. Testing Requirements
+
+必须先写：
+
+unit tests。
+
+测试：
+
+## Core
+
+* state conversion
+* units
+
+## Kepler
+
+* orbit conservation
+
+## Events
+
+* detection correctness
+
+## Symbolic
+
+测试：
+
+```
+ABC
+
+BCA
+
+CAB
+```
+
+等价。
+
+测试：
+
+```
+AABBCC
+
+AAABBBCCC
+```
+
+候选等价。
+
+---
+
+# 24. First Implementation Task
+
+不要写完整模拟器。
+
+第一步：
+
+只完成：
+
+1. repository structure
+2. core data models
+3. Kepler interface
+4. EventTimeline interface
+5. unit test skeleton
+
+输出：
+
+* architecture summary
+* created files
+* design decisions
+* TODO list
+
+不要进入：
+
+* optimization
+* search
+* archive
+* Encke implementation
+
+---
+
+End of Prompt
+
+---
+
+这个版本假设 **repo 完全为空**，适合直接给 Claude Code / Cursor Agent / Codex，让它先搭架构。它会避免一个常见问题：Agent 看到“天体模拟器”直接写一个 monolithic N-body.py，然后后面无法演化。你现在真正需要的是先建立研究平台骨架。
+
+
+//for future
+
+Prompt: Stability-Basin Based Periodic Encounter Chain Discovery Simulator
+Role
+
+你是一名天体动力学、科学计算和混合动力系统方向的软件架构师。
+
+当前项目代码库为空。
+
+请设计一个用于发现 Periodic Encounter Chain (PEC) 的研究模拟框架。
+
+注意：
+
+本项目不再寻找严格数学意义上的周期轨道：
+
+State(t+T)=State(t)
+
+而寻找：
+
+长期重复、可恢复的动力学事件链。
+
+目标：
+
+发现：
+
+Stable Orbit
+      |
+      |
+ Encounter
+      |
+      |
+ Recovery
+      |
+      |
+ Stable Orbit'
+      |
+      |
+ Repeat
+
+即：
+
+周期性存在于：
+
+轨道状态族之间的转换结构
+
+而不是单个精确状态。
+
+1. Research Hypothesis
+
+传统 N-body 周期轨道搜索的问题：
+
+高维
+混沌
+精确周期解稀少
+对初始条件极度敏感
+
+新的假设：
+
+稳定系统不一定满足：
+
+state repeats exactly
+
+而可能满足：
+
+event repeats
++
+post-event state remains inside stable basin
+
+因此搜索目标：
+
+从：
+
+find periodic orbit
+
+转变为：
+
+find periodic transition graph
+2. Dynamical Hierarchy
+
+系统由多个动力学 regime 组成。
+
+Level 0: 1+1 Kepler
+
+角色：
+
+稳定背景。
+
+特点：
+
+解析
+长期稳定
+提供轨道参考
+
+不是研究目标。
+
+Level 1: 2+1 Encounter
+
+角色：
+
+事件 primitive。
+
+例如：
+
+gravity assist / slingshot。
+
+不是长期状态：
+
+而是：
+
+Kepler state
+       |
+       v
+ encounter operator
+       |
+       v
+ new Kepler state
+Level 2: 3+1 System
+
+重点研究区域。
+
+原因：
+
+可能产生：
+
+exchange
+resonance
+temporary capture
+
+目标：
+
+寻找：
+
+ABC
+BCA
+CAB
+
+等重复 encounter pattern。
+
+Level 3: 4+1 System
+
+不假设长期稳定。
+
+更可能：
+
+stable subsystem
++
+temporary participant
+
+作为复杂事件网络。
+
+3. Core Architecture
+
+系统属于：
+
+Hybrid Dynamical System。
+
+连续部分：
+
+dx/dt = f_i(x)
+
+事件：
+
+g(x)=0
+
+跳跃：
+
+x_new = Transition(x_old)
+
+整体：
+
+Kepler
+   |
+   |
+Event Surface
+   |
+   v
+N-body Transition
+   |
+   v
+Kepler
+4. Simulation Strategy
+
+不要全程使用高精度 N-body。
+
+采用：
+
+Hybrid Simulation。
+
+流程：
+
+Kepler Propagation
+
+        |
+        v
+
+Encounter Prediction
+
+        |
+        v
+
+Perturbation Classification
+
+
++------------------------------+
+
+weak perturbation
+
+        |
+        v
+
+Encke / perturbation correction
+
+
+strong encounter
+
+        |
+        v
+
+REBOUND local validation
+
+
++------------------------------+
+
+        |
+        v
+
+Kepler Refitting
+
+        |
+        v
+
+Stability Evaluation
+5. REBOUND Role
+
+REBOUND 不作为搜索器。
+
+职责：
+
+验证局部 transition。
+
+流程：
+
+输入：
+
+pre-event orbital state
+
+运行：
+
+REBOUND high accuracy
+(short time window)
+
+输出：
+
+post-event state
+
+然后：
+
+重新拟合：
+
+a
+e
+i
+Ω
+ω
+
+判断：
+
+是否恢复稳定轨道。
+
+6. Stability Basin Concept
+
+核心创新：
+
+不评价单个轨道。
+
+评价：
+
+稳定区域。
+
+定义：
+
+对一个 nominal state：
+
+生成附近扰动：
+
+S + δ
+
+进行局部格点采样。
+
+例如：
+
+参数：
+
+a
+e
+i
+phase
+velocity
+
+形成：
+
+local perturbation grid
+
+每个格点：
+
+运行：
+
+REBOUND validation
+
+得到：
+
+accepted / rejected
+
+形成：
+
+stability map
+
+例如：
+
++++++
+++O++
++OO++
+++---
+-----
+7. Orbit Deviation Metric
+
+定义：
+
+无量纲轨道偏移：
+
+D=w
+a
+	​
+
+∣Δa/a∣+w
+e
+	​
+
+∣Δe∣+w
+i
+	​
+
+∣Δi∣+w
+Ω
+	​
+
+∣ΔΩ∣
+
+其中：
+
+before:
+
+(a,e,i)
+
+after:
+
+(a',e',i')
+
+接受条件：
+
+D < tolerance
+
+例如：
+
+D < 0.05
+
+注意：
+
+0.05 是稳定族范围，而不是优化目标。
+
+目标：
+
+不是：
+
+D → 0
+
+而是：
+
+D remains bounded
+8. Adaptive Search Strategy
+
+搜索不是固定扫描。
+
+采用：
+
+adaptive exploration。
+
+流程：
+
+Generate seed
+
+        |
+        v
+
+Create local stability grid
+
+        |
+        v
+
+REBOUND validation
+
+        |
+        +----------------+
+        |                |
+     success          failure
+        |                |
+        v                v
+
+ expand basin      modify initial condition
+
+                         |
+                         v
+
+                    new seed
+9. Failure Handling
+Case 1: Encounter too unstable
+
+表现：
+
+D > tolerance
+
+调整：
+
+phase
+impact parameter
+relative velocity
+mass ratio
+
+目标：
+
+降低 encounter 强度。
+
+Case 2: Search stagnation
+
+表现：
+
+长期：
+
+no accepted transition
+
+动作：
+
+重新生成 seed。
+
+类似：
+
+Monte Carlo restart。
+
+10. Event Graph Representation
+
+最终搜索对象：
+
+不是轨迹。
+
+而是：
+
+Stable State Graph
+
+节点：
+
+Stable Orbit Family
+
+边：
+
+Validated Encounter Transition
+
+例如：
+
+S0
+ |
+AB slingshot
+ |
+S1
+ |
+BC encounter
+ |
+S2
+ |
+CA encounter
+ |
+S0
+
+这就是：
+
+Periodic Encounter Chain。
+
+11. Periodicity Detection
+
+周期性不检查：
+
+trajectory(t+T)
+
+检查：
+
+event sequence
+
+例如：
+
+ABCABCABC
+
+处理：
+
+run-length folding
+AABBCC → ABC
+cyclic normalization
+ABC
+BCA
+CAB
+
+same class
+periodic detection
+
+保留：
+
+run length
+duration
+physical metadata
+
+避免丢失动力学信息。
+
+12. Escape and Collision Rules
+
+禁止：
+
+固定 escape distance。
+
+逃逸：
+
+使用：
+
+E=
+2
+v
+2
+	​
+
+−
+r
+GM
+	​
+
+
+判断：
+
+E >= 0
+
+等价：
+
+a <= 0
+
+collision：
+
+r < R1+R2
+
+独立处理。
+
+13. Important Research Question
+
+需要验证：
+
+是否存在：
+
+event transition
+
++
+recovery basin
+
++
+periodic sequence
+
+而不是：
+
+exact periodic orbit
+14. Development Roadmap
+Phase 1
+
+实现：
+
+Kepler baseline
+Event representation
+REBOUND transition validator
+
+目标：
+
+验证：
+
+单个 encounter 是否可恢复。
+
+Phase 2
+
+加入：
+
+stability grid
+deviation distribution
+
+目标：
+
+寻找稳定 basin。
+
+Phase 3
+
+加入：
+
+event graph search
+
+目标：
+
+发现：
+
+S0 → S1 → S2 → S0
+Phase 4
+
+加入：
+
+Encke perturbation layer
+
+目标：
+
+减少不必要 REBOUND 调用。
+
+Phase 5
+
+大规模搜索：
+
+mass ratio
+phase
+orbital parameters
+Final Research Statement
+
+本项目不是寻找：
+
+一个精确周期 N-body 解。
+
+而是寻找：
+
+一个由稳定轨道状态、局部强相互作用事件以及恢复机制组成的周期动力系统。
+
+核心对象：
+
+Stable Basin
+
+      +
+
+Encounter Transition
+
+      +
+
+Event Periodicity
+
+这个 Prompt 可以作为下一阶段架构讨论的基础。它和前面的 EventTimeline 架构相比，最大的变化是：Event 从“观察记录”提升成“状态之间的动力学算子”，而稳定性从单轨道性质提升成稳定区域性质。
+
+对，这样定位 REBOUND 更合理。你现在实际上把架构从“用 REBOUND 做模拟器”转变成：
+
+> **REBOUND 是研究阶段的高精度实验平台，用来建立无量纲规律、验证近似公式、确定分界条件；生产搜索阶段运行的是解析/半解析模型。**
+
+这个分工更加符合你的目标。
+
+---
+
+## 1. REBOUND 的角色重新定义
+
+原来：
+
+```
+Initial Condition
+        |
+        v
+     REBOUND
+        |
+        v
+     Score
+```
+
+问题：
+
+* 太慢
+* 搜索空间巨大
+* 每个候选都积分没有必要
+
+---
+
+现在：
+
+```
+                 Research Phase
+
+                 REBOUND
+                    |
+        ---------------------------
+        |                         |
+        v                         v
+
+  Dimensionless Data       Transition Boundary
+
+        |                         |
+        v                         v
+
+  Approximation Model      Regime Classifier
+```
+
+然后：
+
+```
+                 Search Phase
+
+
+Initial Condition
+
+        |
+        v
+
+  Regime Classifier
+
+        |
+        |
+ -----------------------
+ |          |           |
+Kepler    Encke     Encounter Map
+ |          |           |
+analytic  formula    surrogate
+```
+
+---
+
+# 2. 最关键的是建立无量纲系统
+
+因为你不想研究：
+
+“某个星球质量是多少”。
+
+你想研究：
+
+“某种动力学结构是否存在”。
+
+所以必须归一化。
+
+例如：
+
+中心质量：
+
+[
+GM=1
+]
+
+长度：
+
+[
+a_{ref}=1
+]
+
+时间：
+
+[
+T_{ref}=2\pi
+]
+
+速度：
+
+[
+v_{ref}=\sqrt{GM/a}
+]
+
+于是：
+
+[
+\eta=
+\frac{a_{perturb}}{a_{central}}
+]
+
+天然无量纲。
+
+---
+
+这样 REBOUND 不再输出：
+
+```
+t=365 days
+r=100000km
+```
+
+而输出：
+
+```
+η
+dη/dt
+Δa/a
+Δe
+encounter duration / T
+```
+
+这些才是可推广参数。
+
+---
+
+# 3. 你提出的三段式其实可以变成经验相图
+
+REBOUND 的主要任务：
+
+不是模拟所有轨道。
+
+而是测：
+
+[
+(\eta,\dot{\eta},\tau_{enc})
+\rightarrow
+\text{regime}
+]
+
+例如：
+
+```
+                 η
+
+
+          Encounter
+              |
+              |
+       ----------------
+              |
+          Encke
+              |
+       ----------------
+              |
+          Kepler
+
+
+                  dη/dt
+```
+
+找到边界：
+
+[
+\eta_c
+]
+
+以及：
+
+[
+\dot{\eta}_c
+]
+
+---
+
+# 4. Encke 公式就是从 REBOUND 拟合出来
+
+不是直接假设。
+
+流程：
+
+### Step 1
+
+REBOUND 跑大量样本：
+
+例如：
+
+不同：
+
+* 质量比
+* 初始距离
+* 相位差
+* 偏心率
+
+记录：
+
+[
+\Delta a(t)
+]
+
+[
+\Delta e(t)
+]
+
+---
+
+### Step 2
+
+寻找规律：
+
+例如：
+
+发现：
+
+[
+\frac{da}{dt}
+\approx
+C
+\eta^p
+]
+
+或者：
+
+[
+\frac{\Delta a}{a}
+==================
+
+C
+\int\eta dt
+]
+
+然后得到：
+
+你的 Encke correction。
+
+---
+
+### Step 3
+
+验证：
+
+不用 REBOUND。
+
+用公式跑。
+
+再随机抽样：
+
+REBOUND 对比。
+
+---
+
+# 5. 这解决一个原来的核心问题
+
+之前：
+
+“什么时候进入 subsystem？”
+
+靠：
+
+[
+\eta > threshold
+]
+
+但是 threshold 是人工的。
+
+现在：
+
+变成：
+
+REBOUND 找：
+
+当：
+
+[
+\eta
+]
+
+和：
+
+[
+\dot{\eta}
+]
+
+满足什么条件时：
+
+近似失效。
+
+例如：
+
+```
+if:
+
+η < 10^-4
+
+and
+
+dη/dt < 10^-6
+
+=> Kepler
+
+
+elif:
+
+η < 10^-2
+
+=> Encke
+
+
+else:
+
+=> encounter
+```
+
+这些数字来自实验。
+
+---
+
+# 6. 这也符合你的 PEO 目标
+
+因为 PEO 不是找：
+
+精确闭合轨道。
+
+而是：
+
+寻找：
+
+```
+稳定区域
+       |
+       |
+弱扰动演化
+       |
+       |
+事件
+       |
+       |
+恢复稳定区域
+```
+
+所以真正需要的是：
+
+事件映射：
+
+[
+S_{n+1}=F(S_n)
+]
+
+而不是：
+
+[
+x(t)
+]
+
+REBOUND 只是帮助构造：
+
+[
+F
+]
+
+---
+
+# 7. 最终架构应该类似：
+
+```
+research/
+
+    rebound/
+        high_precision_runner
+
+    calibration/
+        nondimensionalizer
+        parameter_scan
+        boundary_detection
+
+    models/
+        kepler_model
+        encke_model
+        encounter_model
+
+
+runtime/
+
+    classifier/
+        eta_estimator
+
+    propagator/
+        kepler
+        encke
+
+    event/
+        transition_detector
+
+    search/
+        PEO_search
+```
+
+---
+
+所以你的判断基本正确：
+
+**REBOUND 不应该存在于最终搜索循环。**
+
+它应该像实验室里的高精度仪器：
+
+* 标定量纲
+* 发现公式
+* 验证边界
+* 产生训练数据
+
+然后真正搜索 PEO 的时候，用：
+
+**Kepler + Encke + 少量 encounter transition model**
+
+这会把计算复杂度从“每个候选都是 N-body”变成“绝大部分候选是解析传播”。
+
+而且这和你最开始想找的“周期性交会结构”更加匹配，因为你研究的是动力学规律，不是单条数值轨迹。

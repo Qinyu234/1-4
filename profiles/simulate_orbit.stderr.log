@@ -1,6 +1,0 @@
-usage: python.exe [-h] [--lnk LNK] [--radius RADIUS] [--alpha ALPHA]
-                  [--beta BETA] [--solver {own,rebound}]
-                  [--n-periods N_PERIODS]
-                  [--steps-per-period STEPS_PER_PERIOD]
-                  [--output-dir OUTPUT_DIR]
-python.exe: error: unrecognized arguments: D:\10_projects\playground\Astrophysics\experiments\simulate_orbit.py
