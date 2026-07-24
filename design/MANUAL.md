@@ -1,31 +1,33 @@
-<!-- generated: 2026-07-19T04:29 from design.html@untracked -->
+<!-- generated: 2026-07-24T17:32 from design.html@untracked -->
 
 # design — behaviour manual
 
-## generate_ic
-Spans: icgen, physics
+## build_ladder
+Spans: design, core
 
-Build a 5-body System from (v_rad, v_tan) using tetrahedron positions
-and Rodrigues-propagated velocities.
+Construct a 1-central + 4-fairy System from ladder parameters
+(shared e, period ratios, tetrahedral phases) and CanonicalUnits.
 
 ## integrate
-Spans: physics, simulation
+Spans: core, engine
 
-Leapfrog-integrate a System and emit trajectory plus conserved-quantity
-time series.
+REBOUND-integrate a System and emit Trajectory plus conserved-quantity
+time series; apply collision/escape criteria during or after the run.
 
-## evaluate
-Spans: analysis, simulation
+## diagnose
+Spans: engine, observe
 
-Score a trajectory for weaving periodicity, collisions, and energy drift.
+From Trajectory (and optional MEGNO pass), extract a(t), e(t), resonance
+angles, encounter events, and stability flags.
 
-## grid_search
-Spans: search, icgen, simulation, analysis, library
+## run_ladder_experiment
+Spans: design, core, engine, observe, viz, store
 
-Enumerate (v_rad, v_tan), run integrate→evaluate, rank and save candidates.
+End-to-end §5 experiment: build ladder → integrate → diagnose → write
+plots and persist the run (params + metrics + trajectory) in SQLite.
 
-## first_experiment
-Spans: search, icgen, simulation, analysis, library, visualization
+## query_orbits
+Spans: store
 
-Default Planet/Fairy experiment: near-escape 2D grid, ~100 orbital
-periods, plots and orbit_library output.
+Filter saved runs by param_class / e / μ / interest / a-order swap and
+reload Trajectory for follow-up analysis.

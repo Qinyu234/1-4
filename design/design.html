@@ -1,63 +1,66 @@
 <!DOCTYPE html>
 <html>
-<head><title>Fairy Orbit Periodic Search Platform — v1</title></head>
+<head><title>Fairy Orbit — Design → REBOUND Verify</title></head>
 <body>
 
-<section data-role="module" data-name="physics">
-Newtonian N-body: Body, System, pairwise gravity, Leapfrog integrator,
-energy and angular-momentum diagnostics.
+<section data-role="module" data-name="core">
+CanonicalUnits(a_ref, GM), SystemConfig (mass_ratio, R_central),
+Body/System state carriers, and §6 criteria: collision (r_ij &lt; R_i+R_j)
+and energy-based escape (E = v²/2 − GM/r &gt; 0, equiv. a ≤ 0).
 </section>
 
-<section data-role="module" data-name="icgen">
-Tetrahedron geometry, Rodrigues rotations mapping A→B/C/D, and 2D
-near-escape (v_rad, v_tan) initial-condition generation with momentum
-cancellation.
+<section data-role="module" data-name="design">
+Hierarchical Resonant Orbit Chain IC: nested a from period ratios
+≈ 3:2 / 5:3 / 7:5, shared e, non-coplanar tetrahedral periapses
+(PROMPT / docs/DIRECTION.md). T1&lt;T2&lt;T3&lt;T4 is initial ordering only.
 </section>
 
-<section data-role="module" data-name="simulation">
-Trajectory runner: integrates a System over time and records positions,
-velocities, energy, and angular momentum at each step.
+<section data-role="module" data-name="engine">
+Single REBOUND (IAS15) integration path: System → Trajectory
+(positions, velocities, energies, angular momenta). Simulator is the
+physical truth source for verification, not discovery.
 </section>
 
-<section data-role="module" data-name="analysis">
-OrbitEvaluator: permutation-periodic residual over S4, collision
-penalty, energy-drift check, and combined loss score.
+<section data-role="module" data-name="observe">
+Diagnostics on Trajectory: a(t)/e(t), resonance angles, MEGNO, encounter
+Event index, interest score (prefer secular change), and AMD (angular
+momentum deficit) as exchange / stability language.
 </section>
 
-<section data-role="module" data-name="search">
-2D grid scan over (v_rad, v_tan); optional Stage2 optimize stub for
-later local refinement.
+<section data-role="module" data-name="viz">
+Ladder experiment report plots: element evolution, encounter locations,
+MEGNO / stability summary. No search heatmaps as main UX.
 </section>
 
-<section data-role="module" data-name="library">
-Persist and load ranked orbit candidates as JSON under orbit_library/.
+<section data-role="module" data-name="store">
+SQLite persistence of ladder runs, classified by initial-parameter key
+(param_class: e, μ, tetrahedral, period-ratio scale). Trajectories stored
+as sidecar .npz for later reload / query.
 </section>
 
-<section data-role="module" data-name="visualization">
-Plots for trajectories, energy error, and candidate ranking from a scan.
+<section data-role="behaviour" data-name="build_ladder" data-modules="design,core">
+Construct a 1-central + 4-fairy System from ladder parameters
+(shared e, period ratios, tetrahedral phases) and CanonicalUnits.
 </section>
 
-<section data-role="behaviour" data-name="generate_ic" data-modules="icgen,physics">
-Build a 5-body System from (v_rad, v_tan) using tetrahedron positions
-and Rodrigues-propagated velocities.
+<section data-role="behaviour" data-name="integrate" data-modules="core,engine">
+REBOUND-integrate a System and emit Trajectory plus conserved-quantity
+time series; apply collision/escape criteria during or after the run.
 </section>
 
-<section data-role="behaviour" data-name="integrate" data-modules="physics,simulation">
-Leapfrog-integrate a System and emit trajectory plus conserved-quantity
-time series.
+<section data-role="behaviour" data-name="diagnose" data-modules="engine,observe">
+From Trajectory (and optional MEGNO pass), extract a(t), e(t), resonance
+angles, encounter events, and stability flags.
 </section>
 
-<section data-role="behaviour" data-name="evaluate" data-modules="analysis,simulation">
-Score a trajectory for weaving periodicity, collisions, and energy drift.
+<section data-role="behaviour" data-name="run_ladder_experiment" data-modules="design,core,engine,observe,viz,store">
+End-to-end §5 experiment: build ladder → integrate → diagnose → write
+plots and persist the run (params + metrics + trajectory) in SQLite.
 </section>
 
-<section data-role="behaviour" data-name="grid_search" data-modules="search,icgen,simulation,analysis,library">
-Enumerate (v_rad, v_tan), run integrate→evaluate, rank and save candidates.
-</section>
-
-<section data-role="behaviour" data-name="first_experiment" data-modules="search,icgen,simulation,analysis,library,visualization">
-Default Planet/Fairy experiment: near-escape 2D grid, ~100 orbital
-periods, plots and orbit_library output.
+<section data-role="behaviour" data-name="query_orbits" data-modules="store">
+Filter saved runs by param_class / e / μ / interest / a-order swap and
+reload Trajectory for follow-up analysis.
 </section>
 
 </body>

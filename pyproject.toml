@@ -4,14 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fairy-orbit"
-version = "0.1.0"
-description = "Periodic weaving-orbit search platform for tetrahedron fairies"
+version = "0.2.0"
+description = "Orbit design → REBOUND verification for 1 central + 4 fairy orbital ladders"
 requires-python = ">=3.11"
 dependencies = [
   "numpy>=1.26",
   "scipy>=1.11",
   "matplotlib>=3.8",
+  "rebound>=4.4,<5",  # v5 python bindings don't expose ri_ias15 (epsilon/min_dt) yet
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "beautifulsoup4>=4.12"]
 
 [tool.setuptools.packages.find]
 include = ["fairy_orbit*"]

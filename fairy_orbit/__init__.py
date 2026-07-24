@@ -1,3 +1,3 @@
-"""Fairy Orbit: periodic weaving-orbit search experiment platform."""
+"""Fairy Orbit: design orbital ladders and verify with REBOUND."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

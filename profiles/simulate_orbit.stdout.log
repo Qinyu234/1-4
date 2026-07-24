@@ -1,5 +1,0 @@
-Generating system with k=1.000000 (lnk=0.0000), radius=20.00
-Velocities: alpha=0.5000 (v_rad=0.158114), beta=0.6000 (v_tan=0.189737)
-Running simulation with solver 'own' for 5.0 periods (t_end=2809.93, dt=2.809926)...
-Saved trajectory data to trajectory.npy
-Saved interactive 3D viewer to orbit.html
