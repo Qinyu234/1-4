@@ -29,8 +29,9 @@ class ReboundConfig:
     # IAS15 accuracy: smaller epsilon -> smaller adaptive timesteps -> higher precision.
     # None keeps REBOUND's default (1e-9). Set epsilon=0 with dt for fixed timestep.
     epsilon: float | None = None
-    # Floor on the adaptive timestep (0 = no floor). Useful to bound cost.
-    min_dt: float = 0.0
+    # Floor on the adaptive timestep. Default guards exact-symmetry configs where
+    # IAS15's error estimator can collapse dt to ~1e-16 and hang.
+    min_dt: float = 1e-8
 
 
 def _apply_ias15_precision(sim: "rebound.Simulation", config: ReboundConfig) -> None:

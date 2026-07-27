@@ -1,66 +1,72 @@
 <!DOCTYPE html>
 <html>
-<head><title>Fairy Orbit — Design → REBOUND Verify</title></head>
+<head><title>Fairy Orbit — PEO Filter Architecture</title></head>
 <body>
 
 <section data-role="module" data-name="core">
-CanonicalUnits(a_ref, GM), SystemConfig (mass_ratio, R_central),
-Body/System state carriers, and §6 criteria: collision (r_ij &lt; R_i+R_j)
-and energy-based escape (E = v²/2 − GM/r &gt; 0, equiv. a ≤ 0).
+CanonicalUnits, SystemConfig, Body/System carriers.
+Inertial ↔ COM frame (translation only: r'=r−R_cm, v'=v−V_cm).
+Escape criterion. Collision ignored on the PEO path.
 </section>
 
 <section data-role="module" data-name="design">
-Hierarchical Resonant Orbit Chain IC: nested a from period ratios
-≈ 3:2 / 5:3 / 7:5, shared e, non-coplanar tetrahedral periapses
-(PROMPT / docs/DIRECTION.md). T1&lt;T2&lt;T3&lt;T4 is initial ordering only.
+Manifold on fixed Td rays q̂_i. Linear polys a_i=a0+i a1 (same for e,M).
+Td-symmetric velocity kick δv_i=R_i·(vx,vy,vz). IC shifted to inertial COM
+frame. Seed anchors a0=1, e0=e, M0=0, μ=m; free (a1,e1,M1,vx,vy,vz).
 </section>
 
 <section data-role="module" data-name="engine">
-Single REBOUND (IAS15) integration path: System → Trajectory
-(positions, velocities, energies, angular momenta). Simulator is the
-physical truth source for verification, not discovery.
+REBOUND IAS15 simulator Φ_T only: Trajectory (r,v,E,L). No PEO judgment.
 </section>
 
 <section data-role="module" data-name="observe">
-Diagnostics on Trajectory: a(t)/e(t), resonance angles, MEGNO, encounter
-Event index, interest score (prefer secular change), and AMD (angular
-momentum deficit) as exchange / stability language.
+PEO in inertial COM frame: radial order S(t); Kabsch R*∈SO(3);
+E_r/E_v with r'_i(T)≈R r'_{P(i)}(0) (P∈S₄). Angles optional. Escape only.
 </section>
 
 <section data-role="module" data-name="viz">
-Ladder experiment report plots: element evolution, encounter locations,
-MEGNO / stability summary. No search heatmaps as main UX.
+Rep-error and stereo reports: 8-channel curves, σ tables, seed rankings.
 </section>
 
 <section data-role="module" data-name="store">
-SQLite persistence of ladder runs, classified by initial-parameter key
-(param_class: e, μ, tetrahedral, period-ratio scale). Trajectories stored
-as sidecar .npz for later reload / query.
+Candidate archive for filter survivors (θ, T, P, R*, 8-channel E, σ-tilde).
 </section>
 
-<section data-role="behaviour" data-name="build_ladder" data-modules="design,core">
-Construct a 1-central + 4-fairy System from ladder parameters
-(shared e, period ratios, tetrahedral phases) and CanonicalUnits.
+<section data-role="behaviour" data-name="generate_manifold" data-modules="design,core">
+Build System from θ or seed: a0=1, M0=0, e0=e, μ=m; a_i=a0+i a1;
+δv via Rodrigues Td map; shift to inertial COM (Σmr=Σmv=0).
 </section>
 
-<section data-role="behaviour" data-name="integrate" data-modules="core,engine">
-REBOUND-integrate a System and emit Trajectory plus conserved-quantity
-time series; apply collision/escape criteria during or after the run.
+<section data-role="behaviour" data-name="simulate" data-modules="core,engine">
+Integrate System with REBOUND; stop on escape only (collision off).
 </section>
 
-<section data-role="behaviour" data-name="diagnose" data-modules="engine,observe">
-From Trajectory (and optional MEGNO pass), extract a(t), e(t), resonance
-angles, encounter events, and stability flags.
+<section data-role="behaviour" data-name="radial_choreography" data-modules="observe,engine">
+Compute radial order S(t); fix P from S(T) vs S(0) (Level 1).
 </section>
 
-<section data-role="behaviour" data-name="run_ladder_experiment" data-modules="design,core,engine,observe,viz,store">
-End-to-end §5 experiment: build ladder → integrate → diagnose → write
-plots and persist the run (params + metrics + trajectory) in SQLite.
+<section data-role="behaviour" data-name="closure_errors" data-modules="observe,engine">
+Fixed P → R* from positions; emit relative E_r/E_v and element residuals
+(E_a,E_e,E_i,E_Ω,E_ω,E_M) with the same R*.
 </section>
 
-<section data-role="behaviour" data-name="query_orbits" data-modules="store">
-Filter saved runs by param_class / e / μ / interest / a-order swap and
-reload Trajectory for follow-up analysis.
+<section data-role="behaviour" data-name="rep_error_scan" data-modules="design,engine,observe,viz">
+Td Stage A scan: all 8 channels together vs (m,e,…); write series + REPORT.
+Re-run whenever scan knobs change.
+</section>
+
+<section data-role="behaviour" data-name="normalize_sigmas" data-modules="observe,store,viz">
+From scan sample cloud compute σ_i and write sigmas.json for consumers.
+</section>
+
+<section data-role="behaviour" data-name="stereo_from_seed" data-modules="design,engine,observe,store">
+For each (m,e): grid+beam over (a1,e1,M1,vx,vy,vz), keep low historical
+loss beams, refine (bisect/FD), score 8 channels with σ.
+</section>
+
+<section data-role="behaviour" data-name="peo_filter" data-modules="design,core,engine,observe,store">
+Pipeline: generate → simulate → escape → choreography → 8-channel errors
+→ σ-normalize → archive. Refinement F(θ)=0 is later.
 </section>
 
 </body>

@@ -42,6 +42,26 @@ def amd_of_elements(
     return float(Lcirc * (1.0 - np.sqrt(max(0.0, 1.0 - e * e)) * np.cos(i)))
 
 
+def amd_total_from_aei(
+    a: np.ndarray,
+    e: np.ndarray,
+    i: np.ndarray,
+    masses: np.ndarray,
+    mu: float,
+) -> np.ndarray:
+    """Vectorized AMD total per time from (a, e, i) arrays of shape (T, n)."""
+    a = np.asarray(a, dtype=float)
+    e = np.asarray(e, dtype=float)
+    i = np.asarray(i, dtype=float)
+    m = np.asarray(masses, dtype=float).reshape(1, -1)
+    bound = (a > 0.0) & (e < 1.0)
+    with np.errstate(invalid="ignore"):
+        Lcirc = m * np.sqrt(np.where(a > 0.0, mu * a, 0.0))
+        amd = Lcirc * (1.0 - np.sqrt(np.maximum(0.0, 1.0 - e * e)) * np.cos(i))
+    amd = np.where(bound, amd, np.nan)
+    return np.nansum(amd, axis=1)
+
+
 def extract_amd_series(
     elements: ElementSeries,
     masses: np.ndarray,

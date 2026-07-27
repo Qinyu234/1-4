@@ -170,7 +170,7 @@ class OrbitStore:
         param_class = make_param_class(
             eccentricity=params.eccentricity,
             mass_ratio=config.mass_ratio,
-            tetrahedral=bool(params.tetrahedral),
+            tetrahedral=params.resolved_geometry() == "tetrahedral_3d",
             period_ratios=params.period_ratios,
             a_inner=params.a_inner,
         )
@@ -197,7 +197,7 @@ class OrbitStore:
                 float(ratios[0]),
                 float(ratios[1]),
                 float(ratios[2]),
-                int(bool(params.tetrahedral)),
+                int(params.resolved_geometry() == "tetrahedral_3d"),
                 float(t_end),
                 int(n_outputs),
                 str(summary.get("status", "unknown")),

@@ -34,7 +34,7 @@ def test_tetrahedral_phases_are_distinct():
 
 def test_ladder_period_ratios():
     cfg = SystemConfig(mass_ratio=1e-6)
-    params = LadderParams(eccentricity=0.1, a_inner=1.0, tetrahedral=True)
+    params = LadderParams(eccentricity=0.1, a_inner=1.0, geometry="planar_alternating")
     system = build_orbital_ladder(cfg, params)
     assert system.n == 5
     ratios = ladder_period_ratios(system, cfg)
@@ -46,7 +46,7 @@ def test_ladder_period_ratios():
 
 def test_ladder_shared_eccentricity():
     cfg = SystemConfig(mass_ratio=1e-6)
-    params = LadderParams(eccentricity=0.2, tetrahedral=True)
+    params = LadderParams(eccentricity=0.2, geometry="planar_alternating")
     system = build_orbital_ladder(cfg, params)
     mu = cfg.mu
     central = system.bodies[0]
@@ -60,11 +60,13 @@ def test_ladder_shared_eccentricity():
 
 
 def test_tetrahedral_ladder_is_non_coplanar():
-    """PROMPT §5: periapses along tetrahedron vertices — not four flat i=0 rings."""
+    """Nested-a tetrahedron periapses — mutually asymmetric planes."""
     from fairy_orbit.design.tetrahedron import VERTICES
 
     cfg = SystemConfig(mass_ratio=1e-6)
-    system = build_orbital_ladder(cfg, LadderParams(eccentricity=0.15, tetrahedral=True))
+    system = build_orbital_ladder(
+        cfg, LadderParams(eccentricity=0.15, geometry="tetrahedral_3d")
+    )
     central = system.bodies[0]
     omegas_node = []
     hs = []
@@ -85,10 +87,9 @@ def test_tetrahedral_ladder_is_non_coplanar():
     assert float(np.min(np.abs(dots))) < 0.95
 
 
-def test_coplanar_legacy_mode_still_works():
+def test_tetrahedral_bool_compat():
     cfg = SystemConfig(mass_ratio=1e-6)
     system = build_orbital_ladder(
-        cfg, LadderParams(eccentricity=0.1, tetrahedral=False, inclination=0.0)
+        cfg, LadderParams(eccentricity=0.1, tetrahedral=True)
     )
-    for body in system.bodies[1:]:
-        assert abs(body.position[2]) < 1e-10
+    assert system.bodies[1].position[2] != 0.0 or abs(system.bodies[2].position[2]) > 0

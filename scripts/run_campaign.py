@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Entry points: ladder observe, dynamics scan, query store, perf."""
+"""Entry points for error / calibration experiments only."""
 
 from __future__ import annotations
 
@@ -21,112 +21,62 @@ def run(cmd: list[str]) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fairy Orbit experiment launcher")
+    parser = argparse.ArgumentParser(description="Fairy Orbit error-experiment launcher")
     parser.add_argument(
         "mode",
-        choices=["smoke", "ladder", "dynamics", "query", "classes", "perf", "report", "refine"],
-        help="smoke|ladder|dynamics|query|classes|perf|report|refine",
+        choices=[
+            "smoke",
+            "calib",
+            "td_group",
+            "td_error",
+            "td_beta_e",
+            "td_growth",
+            "td_dense",
+            "peo",
+        ],
+        help="smoke|calib|td_group|td_error|td_beta_e|td_growth|td_dense|peo",
     )
-    parser.add_argument("--t-end", type=float, default=800.0)
-    parser.add_argument("--megno", action="store_true")
-    parser.add_argument("--e-min", type=float, default=None)
-    parser.add_argument("--e-max", type=float, default=None)
-    parser.add_argument("--mu-min", type=float, default=None)
-    parser.add_argument("--mu-max", type=float, default=None)
-    parser.add_argument("--min-interest", type=float, default=None)
-    parser.add_argument("--swap", action="store_true")
-    parser.add_argument("--limit", type=int, default=20)
-    parser.add_argument("--ids", type=int, nargs="*", help="explicit run ids for refine")
-    parser.add_argument("--epsilon", type=float, default=None, help="IAS15 accuracy for refine")
+    parser.add_argument("--t-end", type=float, default=None)
+    parser.add_argument("--epsilon", type=float, default=None)
+    parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args()
 
     if args.mode == "smoke":
-        code = run([_py(), str(ROOT / "experiments" / "run_orbital_ladder.py"), "--smoke"])
+        code = run([_py(), str(ROOT / "experiments" / "run_calibration.py"), "--smoke"])
         if code == 0:
             code = run(
-                [_py(), str(ROOT / "experiments" / "run_dynamics_scan.py"), "--smoke"]
-            )
-        if code == 0:
-            code = run(
-                [_py(), str(ROOT / "experiments" / "query_orbits.py"), "classes"]
+                [
+                    _py(),
+                    str(ROOT / "experiments" / "run_peo_smoke.py"),
+                    "--smoke",
+                ]
             )
         raise SystemExit(code)
 
-    if args.mode == "ladder":
-        raise SystemExit(
-            run(
-                [
-                    _py(),
-                    str(ROOT / "experiments" / "run_orbital_ladder.py"),
-                    "--t-end",
-                    str(args.t_end),
-                    "--out",
-                    str(ROOT / "experiments" / "output" / "ladder"),
-                ]
-            )
-        )
-
-    if args.mode == "dynamics":
-        cmd = [
-            _py(),
-            str(ROOT / "experiments" / "run_dynamics_scan.py"),
-            "--t-end",
-            str(args.t_end),
-        ]
-        if args.megno:
-            cmd.append("--megno")
-        raise SystemExit(run(cmd))
-
-    if args.mode == "classes":
-        raise SystemExit(
-            run([_py(), str(ROOT / "experiments" / "query_orbits.py"), "classes"])
-        )
-
-    if args.mode == "query":
-        cmd = [_py(), str(ROOT / "experiments" / "query_orbits.py"), "query", "--limit", str(args.limit)]
-        if args.e_min is not None:
-            cmd += ["--e-min", str(args.e_min)]
-        if args.e_max is not None:
-            cmd += ["--e-max", str(args.e_max)]
-        if args.mu_min is not None:
-            cmd += ["--mu-min", str(args.mu_min)]
-        if args.mu_max is not None:
-            cmd += ["--mu-max", str(args.mu_max)]
-        if args.min_interest is not None:
-            cmd += ["--min-interest", str(args.min_interest)]
-        if args.swap:
-            cmd.append("--swap")
-        raise SystemExit(run(cmd))
-
-    if args.mode == "perf":
-        raise SystemExit(
-            run(
-                [
-                    _py(),
-                    str(ROOT / "experiments" / "analyze_perf.py"),
-                    "--campaign",
-                    str(ROOT / "experiments" / "output" / "dynamics"),
-                    "--out",
-                    str(ROOT / "experiments" / "output" / "perf"),
-                ]
-            )
-        )
-
-    if args.mode == "report":
-        raise SystemExit(
-            run([_py(), str(ROOT / "experiments" / "report_scan.py")])
-        )
-
-    if args.mode == "refine":
-        cmd = [_py(), str(ROOT / "experiments" / "refine_candidates.py")]
-        if args.ids:
-            cmd += ["--ids", *[str(i) for i in args.ids]]
-        if args.min_interest is not None:
-            cmd += ["--min-interest", str(args.min_interest)]
+    if args.mode == "calib":
+        cmd = [_py(), str(ROOT / "experiments" / "run_calibration.py")]
+        if args.t_end is not None:
+            cmd += ["--t-end", str(args.t_end)]
         if args.epsilon is not None:
             cmd += ["--epsilon", str(args.epsilon)]
-        cmd += ["--t-end", str(args.t_end)]
+        if args.smoke:
+            cmd.append("--smoke")
         raise SystemExit(run(cmd))
+
+    scripts = {
+        "td_group": "run_td_group_orbit.py",
+        "td_error": "run_tetra_error_growth.py",
+        "td_beta_e": "run_td_beta_e_scan.py",
+        "td_growth": "fit_td_growth_law.py",
+        "td_dense": "run_td_dense_growth.py",
+        "peo": "run_peo_smoke.py",
+    }
+    cmd = [_py(), str(ROOT / "experiments" / scripts[args.mode])]
+    if args.smoke and args.mode in {"td_group", "td_error", "td_beta_e", "peo"}:
+        cmd.append("--smoke")
+    if args.t_end is not None and args.mode in {"td_group", "td_error", "td_beta_e", "peo"}:
+        cmd += ["--t-end", str(args.t_end)]
+    raise SystemExit(run(cmd))
 
 
 if __name__ == "__main__":

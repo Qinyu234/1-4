@@ -32,5 +32,9 @@ class Trajectory:
     def shape(self) -> tuple[int, int, int]:
         return self.positions.shape
 
+    @property
+    def n_bodies(self) -> int:
+        return int(self.positions.shape[1]) if self.positions.ndim >= 2 else 0
+
     def __len__(self) -> int:
         return int(self.times.shape[0])

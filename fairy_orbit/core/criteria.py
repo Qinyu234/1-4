@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from enum import Enum
 
 import numpy as np
 
-from fairy_orbit.core.body import System
+from fairy_orbit.core.body import System, norm3
 
 
 class SimulationStatus(Enum):
@@ -22,8 +23,8 @@ def specific_orbital_energy(
     mu: float,
 ) -> float:
     """Specific two-body energy relative to the central mass: E = v²/2 − μ/r."""
-    r = float(np.linalg.norm(position))
-    v2 = float(np.dot(velocity, velocity))
+    r = norm3(position)
+    v2 = float(velocity[0] ** 2 + velocity[1] ** 2 + velocity[2] ** 2)
     if r <= 0.0:
         return float("inf")
     return 0.5 * v2 - mu / r
@@ -31,13 +32,21 @@ def specific_orbital_energy(
 
 def check_collision(system: System, soft_floor: float = 0.0) -> bool:
     """True if any pair satisfies r_ij < R_i + R_j (and ≥ soft_floor)."""
-    pos = system.positions()
-    radii = system.radii()
-    n = system.n
+    bodies = system.bodies
+    n = len(bodies)
+    # Fast exit when all radii are zero and no soft floor (scale-free benchmark)
+    if soft_floor <= 0.0 and all(b.radius <= 0.0 for b in bodies):
+        return False
     for i in range(n):
+        pi = bodies[i].position
+        ri = bodies[i].radius
         for j in range(i + 1, n):
-            dist = float(np.linalg.norm(pos[i] - pos[j]))
-            thresh = max(radii[i] + radii[j], soft_floor)
+            pj = bodies[j].position
+            dx = pj[0] - pi[0]
+            dy = pj[1] - pi[1]
+            dz = pj[2] - pi[2]
+            dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+            thresh = max(ri + bodies[j].radius, soft_floor)
             if thresh > 0.0 and dist < thresh:
                 return True
     return False

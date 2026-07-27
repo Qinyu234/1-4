@@ -1,13 +1,13 @@
 # Fairy Orbit — Design → REBOUND Verify
 
-Design orbital ladders, then verify with REBOUND. Goal (see `PROMPT.md` §3):  
-**slow energy exchange / a-migration / role swap** — not rigid, unchanging orbits.
+Layered search for **relative periodic encounter orbits (PEO)**.  
+Architecture (see [`PROMPT.md`](PROMPT.md)):
 
-Blind `(v_rad, v_tan)` search and the old “soak for MEGNO≈2 static score” campaign
-are abandoned.
+1. **Initial manifold generator** — \(\theta\in\mathbb{R}^7 \to X_0=f(\theta)\)
+2. **Simulator** — REBOUND \(\Phi_T\) only (no PEO judgment)
+3. **PEO filter pipeline** — escape/collision → encounter choreography → SO(3) closure → velocity match → archive → refine
 
-Source of truth for intent: [`PROMPT.md`](PROMPT.md) (raw dialogue).  
-Distilled judgments: [`docs/DIRECTION.md`](docs/DIRECTION.md).  
+Distilled status: [`docs/DIRECTION.md`](docs/DIRECTION.md).  
 Module map: [`design/design.html`](design/design.html).
 
 ## Environment
@@ -18,40 +18,27 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\pip install -e .
 ```
 
-## Single ladder observation
+## Error experiments (kept)
 
-```powershell
-.\.venv\Scripts\python experiments\run_orbital_ladder.py --smoke
-.\.venv\Scripts\python experiments\run_orbital_ladder.py --t-end 800
-```
-
-## Dynamics scan (prefer changing orbits)
-
-Scans `e × μ ×` mild period-ratio detunes; ranks by **interest** (a migration,
-encounters, a-order swap; rejects near-static success). Results go to SQLite.
+Integrator floors + Td group-orbit error base (exponential normalize).
 
 ```powershell
 .\.venv\Scripts\python scripts\run_campaign.py smoke
-.\.venv\Scripts\python scripts\run_campaign.py dynamics --t-end 800
+.\.venv\Scripts\python scripts\run_campaign.py calib
+.\.venv\Scripts\python scripts\run_campaign.py td_group --smoke
+.\.venv\Scripts\python scripts\run_campaign.py td_beta_e --smoke
+.\.venv\Scripts\python scripts\run_campaign.py td_growth
 ```
 
-Outputs: `experiments/output/dynamics/` + DB `experiments/output/orbit_db/orbits.sqlite`.
+Outputs under `experiments/output/`:
 
-## Query saved orbits (by initial params)
-
-```powershell
-.\.venv\Scripts\python scripts\run_campaign.py classes
-.\.venv\Scripts\python scripts\run_campaign.py query --mu-min 1e-3 --min-interest 1 --swap
-.\.venv\Scripts\python experiments\query_orbits.py get 3 --traj
-```
-
-`param_class` example: `e0.15_mu1e-03_tet1_s1.00_a1.00`.
-
-## Perf
-
-```powershell
-.\.venv\Scripts\python scripts\run_campaign.py perf
-```
+| Dir | Content |
+|-----|---------|
+| `calibration/` | \(\varepsilon_{\mathrm{numerical}}(N)\) |
+| `td_group_orbit_*` | Td ABC error growth |
+| `td_error_growth/` | Multi-integrator tetra error |
+| `td_beta_e_scan/` | \((\beta,e)\) breaking map |
+| `td_growth_law/` | lin vs exp growth law |
 
 ## Tests
 
@@ -64,9 +51,9 @@ Outputs: `experiments/output/dynamics/` + DB `experiments/output/orbit_db/orbits
 | Package | Role |
 |---------|------|
 | `fairy_orbit.core` | Units, config, Body/System, criteria |
-| `fairy_orbit.design` | Ladder IC + Kepler elements + tetrahedral phases |
+| `fairy_orbit.design` | Ladder / graded / Td group-orbit IC |
 | `fairy_orbit.engine` | REBOUND → Trajectory |
-| `fairy_orbit.observe` | Elements, resonance, MEGNO, encounters, **interest** |
+| `fairy_orbit.observe` | Elements, encounters, AMD, **error_base** |
 | `fairy_orbit.viz` | Reports + orbit plots |
-| `fairy_orbit.store` | SQLite results by `param_class` + trajectory sidecars |
-| `fairy_orbit.legacy` | Quarantined search / hierarchical code |
+| `fairy_orbit.store` | SQLite results (PEO archive, later) |
+| `fairy_orbit.legacy` | Quarantined old search / hierarchical code |

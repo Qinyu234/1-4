@@ -41,7 +41,9 @@ Naming: prefer **Hierarchical Resonant Orbit Chain** over vague “orbital ladde
 | Instantaneous distance kernel \(K_{ij}(t)=\exp(-d^2/\sigma^2)\) multiplied into secular \(R\) | **Reject as mixed timescale** | Secular theory averages fast angles; \(d_{ij}(t)\) belongs to encounter / direct N-body, not averaged LPE |
 | Merge η / Subsystem / Encke “close-encounter line” into the same \(R_{ij}\) as the ladder secular model | **Demote / keep separate** | Same idea as archived §8; useful for strong flybys (toolkit §7), not the main secular-chain path |
 | Blind \((v_{\mathrm{rad}},v_{\mathrm{tan}})\) search / soak for MEGNO≈2 static orbits | **Abandoned earlier** | Candidate generation bottleneck; static rings are not the desired phenomenon |
-| Same-radius tetrahedron + Rodrigues velocity copy as main IC | **Trap** | Exact symmetry → rigid evolution; use **non-coplanar tetrahedral periapses on nested \(a\)** instead |
+| Rodrigues `(v_rad,v_tan)` equal copy as Td ∀t | **Reject** | Not a group orbit; \(D_{Td}\to O(1)\) in ≪1 orbit |
+| μ_eff **Kepler ellipses** as Td reference | **Reject** | Orbit is \(\rho(t)R(t)q_i\), not planar ellipses |
+| **Td group orbit** \(r_i=\rho R q_i\) from reduced Lagrangian | **Keep / SOT** | \(A\ddot\rho=-C/\rho^2+J^2/(B\rho^3)\); shape \(\theta(\rho)\) = elliptic integral |
 | Drop all non-adjacent \(R_{ij}\) without checking | **Not yet accepted** | For 3:2×5:3×7:5, \(a_4/a_1\approx2.30\) ⇒ \(\alpha_{14}\approx0.43\) — Laplace terms not obviously negligible; verify before assuming |
 
 ### Optimized middle ground
@@ -53,20 +55,27 @@ Naming: prefer **Hierarchical Resonant Orbit Chain** over vague “orbital ladde
 
 ## 3. Pipeline to execute (now)
 
+Aligned with [`PROMPT.md`](../PROMPT.md). Collision ignored on PEO path.
+
 ```text
-Orbit-family generator (nested a + shared e + tetrahedral 3D periapses)
+[done] Generator + Simulator + closure scores
+  θ∈ℝ⁷ → ManifoldParams → REBOUND Φ_T
+  Orbit error := E_r(t), E_v(t)  (shape / velocity under best (R,P))
         │
         ▼
-REBOUND IAS15  (parameter scan → SQLite by param_class)
-        │
-        ▼
-Observe: a(t), e(t), encounters, interest, AMD
-        │
-        ▼
-Rank / query / plot  (prefer change: migration, swap — not static)
+[next] Filter thresholds + archive + refinement F(θ)=0
+  Level 0 escape → Level 1 radial S(T)=P(S(0)) → Level 2–3 cut on E_r, E_v
 ```
 
-**Deferred:** full LPE integrator, free \(W_{ij}\), distance-kernel secular hybrid.
+**Orbit error definition:** not D_Td / energy proxies. For each sample t,
+Kabsch \(R\in SO(3)\) and \(P\in S_4\) minimize
+
+\[
+E_r=\sum_i\|r_i(t)-R r_{P(i)}(0)\|^2,\quad
+E_v=\sum_i\|v_i(t)-R v_{P(i)}(0)\|^2.
+\]
+
+Drift of \((E_r(t),E_v(t))\) is the error time series (`observe.closure`).
 
 ---
 
@@ -74,25 +83,22 @@ Rank / query / plot  (prefer change: migration, swap — not static)
 
 | Piece | Role |
 |-------|------|
-| `fairy_orbit.design` | Hierarchical resonant chain IC |
-| `fairy_orbit.engine` | REBOUND truth |
-| `fairy_orbit.observe` | Elements, encounters, interest, AMD |
-| `fairy_orbit.store` | SQLite + traj sidecars, classed by IC |
-| `experiments/run_dynamics_scan.py` | Wide IC scan |
-| `experiments/query_orbits.py` | Call saved runs later |
-| `experiments/report_scan.py` | Post-scan: re-integrate top hits + AMD plots |
-| `scripts/run_campaign.py report` | Launcher for the report |
-| `fairy_orbit.legacy` | Old search / hierarchical sim (quarantine) |
+| `fairy_orbit.design.manifold` | 7D θ → X₀ on Td rays |
+| `fairy_orbit.design.tetra_eff` | Td group-orbit analytic (legacy calib) |
+| `fairy_orbit.engine` | REBOUND Φ_T |
+| `fairy_orbit.observe.closure` | Kabsch, E_r, E_v, radial S(t) |
+| `fairy_orbit.observe.peo` | Filter: escape → choreography → closure |
+| `fairy_orbit.observe.error_base` | Exp normalize of E_r/E_v |
+| `experiments/run_peo_smoke.py` | Smoke E_r(t)/E_v(t) |
+| `experiments/run_calibration.py` | ε_numerical (legacy) |
+| `experiments/run_td_*` | Prior Td error campaigns (kept) |
+| `scripts/run_campaign.py` | calib / peo / td_* |
 
 ---
 
-## 5. Success criteria (from §1 + dialogue)
+## 5. Success criteria
 
-A chain is interesting if REBOUND shows, without requiring a custom gravity model:
+**Closure (now):** E_r(0)=E_v(0)=0; growth of E_r, E_v is the orbit error.
 
-1. Bound / long-lived enough to study (not instant escape/collision),
-2. Visible **semi-major-axis / AMD exchange** (not frozen rings),
-3. Quasi-periodic **encounters** (event index),
-4. Optionally later: secular approximation that **explains** the same trends.
-
-Hard reject for product taste: high MEGNO≈2 **and** near-zero \(a\) drift (static).
+**PEO (PROMPT):** \(\Phi_T(X_0)\approx(R,P)X_0\) after escape + radial
+choreography filters — archive then refine.
