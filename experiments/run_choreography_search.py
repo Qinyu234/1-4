@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Long-running free-N choreography search (PROMPT construct)."""
+"""Long-running free-N choreography search (PROMPT construct; SQLite resume)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Choreography multi-start search")
+    p = argparse.ArgumentParser(description="Choreography multi-start search (SQL-backed)")
     p.add_argument("--n", type=int, required=True, choices=[4, 5])
     p.add_argument(
         "--wall-hours",
@@ -23,11 +23,23 @@ def main() -> None:
     p.add_argument("--shift", type=int, default=1)
     p.add_argument("--max-nfev", type=int, default=14)
     p.add_argument("--out", type=Path, default=None)
+    p.add_argument(
+        "--db",
+        type=Path,
+        default=None,
+        help="SQLite path (default: <out>/search.sqlite)",
+    )
+    p.add_argument(
+        "--fresh",
+        action="store_true",
+        help="clear SQLite trials for this N before starting",
+    )
     args = p.parse_args()
     out = args.out or (ROOT / "experiments" / "output" / f"choreography_search_n{args.n}")
     wall = None if args.wall_hours <= 0 else args.wall_hours
     print(
-        f"choreography search n={args.n} wall={'unlimited' if wall is None else f'{wall}h'} → {out}",
+        f"choreography search n={args.n} wall={'unlimited' if wall is None else f'{wall}h'} "
+        f"fresh={args.fresh} → {out}",
         flush=True,
     )
 
@@ -43,6 +55,8 @@ def main() -> None:
         shift=args.shift,
         max_nfev=args.max_nfev,
         out_dir=out,
+        db_path=args.db,
+        fresh=args.fresh,
         on_progress=prog,
     )
     print("DONE", summary, flush=True)

@@ -92,6 +92,9 @@ def main() -> None:
             ],
         ),
     ]
+    if args.fresh:
+        jobs[0][1].append("--fresh")
+        jobs[1][1].append("--fresh")
     if args.seed_n4 is not None:
         jobs.append(
             (
