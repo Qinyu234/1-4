@@ -1,16 +1,13 @@
 """Equal-mass choreography search (PROMPT construct path).
 
-Practical loop for long campaigns: multi-start polish of free-N IC so that
-§3.2 residual x_i(T/n)=R x_P(i)(0) (r and v) → 0, with a soft collision
-penalty. Seeds from regular polygon RE; not Bayes.
-
-True truncated-Fourier + action (Vanderbei-style) can replace the IC vector
-later; the campaign API stays the same.
+Multi-start polish of free-N IC for §3.2 residual. Orbits that *maintain*
+a regular equal n-gon (rigid RE) are rejected; momentary polygonal shape is OK.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,21 +17,17 @@ import numpy as np
 from scipy.optimize import least_squares
 
 from fairy_orbit.core.body import Body, System, to_com_inertial_frame
-from fairy_orbit.design.seeds import (
-    OrbitSeed,
-    build_free_polygon_seed,
-    save_seed,
-)
+from fairy_orbit.design.seeds import OrbitSeed, save_seed
 from fairy_orbit.engine.rebound_engine import ReboundConfig, integrate
 from fairy_orbit.observe.choreography_verify import (
+    accept_free_choreography,
     cyclic_role_perm,
-    verify_choreography_Tn,
+    is_regular_equal_ngon,
 )
 from fairy_orbit.observe.closure import closure_for_perm
 
 
 def _pack(seed: OrbitSeed) -> np.ndarray:
-    """State vector: positions + velocities (period fixed on template)."""
     return np.concatenate(
         [
             np.asarray(seed.positions, dtype=float).ravel(),
@@ -91,6 +84,69 @@ def _collision_penalty(pos: np.ndarray, floor: float = 1e-3) -> float:
     return pen
 
 
+def _maintained_ngon_soft_penalty(
+    r0: np.ndarray,
+    r_tau: np.ndarray,
+    strength: float = 50.0,
+) -> float:
+    """Soft push away from rigid RE: regular at t=0 and still regular at T/n."""
+    if is_regular_equal_ngon(r0, rtol=0.08) and is_regular_equal_ngon(
+        r_tau, rtol=0.08
+    ):
+        return strength
+    return 0.0
+
+
+def random_asymmetric_seed(
+    n: int,
+    rng: np.random.Generator,
+    *,
+    G: float = 1.0,
+    mass: float = 1.0,
+) -> OrbitSeed:
+    """Random planar IC (unequal radii/gaps preferred; polygonal snapshot OK)."""
+    gaps = rng.uniform(0.3, 1.7, size=n)
+    gaps = gaps / gaps.sum() * 2.0 * math.pi
+    angles = np.cumsum(gaps) - gaps[0]
+    radii = rng.uniform(0.4, 1.6, size=n)
+    pos = np.zeros((n, 3))
+    vel = np.zeros((n, 3))
+    for i in range(n):
+        c, s = math.cos(angles[i]), math.sin(angles[i])
+        pos[i] = (radii[i] * c, radii[i] * s, 0.0)
+        speed = rng.uniform(0.4, 1.4)
+        vt = speed * (0.85 + 0.15 * rng.random())
+        vr = rng.normal(0.0, 0.15)
+        vel[i] = (-vt * s + vr * c, vt * c + vr * s, 0.0)
+
+    period = float(rng.uniform(4.0, 10.0))
+    names = tuple(f"B{i+1}" for i in range(n))
+    family = f"free_{n}"
+    sys = System(
+        bodies=[
+            Body(mass=mass, position=pos[i], velocity=vel[i], name=names[i])
+            for i in range(n)
+        ],
+        G=G,
+    )
+    to_com_inertial_frame(sys)
+    return OrbitSeed(
+        id=f"rand_{n}",
+        family=family,
+        n_bodies=n,
+        G=G,
+        masses=tuple(mass for _ in range(n)),
+        period=period,
+        positions=np.stack([b.position for b in sys.bodies]),
+        velocities=np.stack([b.velocity for b in sys.bodies]),
+        names=names,
+        symmetry="asymmetric_search",
+        source="random_asymmetric_ic",
+        notes="random planar start",
+        central_index=None,
+    )
+
+
 def symmetry_residual_seed(
     seed: OrbitSeed,
     *,
@@ -123,11 +179,11 @@ def symmetry_residual_seed(
     for i, j in enumerate(perm):
         chunks.append(r[i] - R @ r0[j])
         chunks.append(v[i] - R @ v0[j])
-    pen = _collision_penalty(r0)
-    out = np.concatenate(chunks).astype(float)
-    if pen > 0:
-        out = np.concatenate([out, np.array([pen])])
-    return out
+    extras = [
+        _collision_penalty(r0),
+        _maintained_ngon_soft_penalty(r0, r),
+    ]
+    return np.concatenate([np.concatenate(chunks).astype(float), np.asarray(extras)])
 
 
 def polish_seed(
@@ -155,78 +211,59 @@ class SearchTrial:
     period: float
     ok_gate: bool
     path: str | None
+    reason: str
 
 
 def run_choreography_search(
     n: int,
     *,
-    wall_hours: float = 8.0,
+    wall_hours: float | None = None,
     shift: int = 1,
-    seed_scale: float = 0.05,
     rng: np.random.Generator | None = None,
     out_dir: Path | None = None,
-    max_nfev: int = 10,
+    max_nfev: int = 14,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """
     Long-running multi-start §3.2 polish for free equal-mass N-body.
 
-    Returns summary with best residual and paths of gate-passing seeds.
+    ``wall_hours=None`` runs until interrupted (unlimited).
+    Maintained regular n-gon REs never count as passes.
     """
     rng = rng or np.random.default_rng(n * 10007 + 17)
     out_dir = Path(out_dir or f"experiments/output/choreography_search_n{n}")
     out_dir.mkdir(parents=True, exist_ok=True)
     log_path = out_dir / "trials.jsonl"
 
-    family = f"free_{n}"
-    base = build_free_polygon_seed(n, seed_id=f"{family}_square_re" if n == 4 else f"{family}_pentagon_re", family=family)
-    # fix id naming
-    if n == 4:
-        base = build_free_polygon_seed(4, seed_id="free_4_square_re", family="free_4")
-    else:
-        base = build_free_polygon_seed(5, seed_id="free_5_pentagon_re", family="free_5")
-
-    t_end = time.time() + float(wall_hours) * 3600.0
+    t_end = (
+        None
+        if wall_hours is None or wall_hours <= 0
+        else time.time() + float(wall_hours) * 3600.0
+    )
     best_res = float("inf")
     best_seed: OrbitSeed | None = None
-    trials: list[SearchTrial] = []
     trial = 0
     passed = 0
+    rejected_maintained = 0
 
     with log_path.open("a", encoding="utf-8") as logf:
-        while time.time() < t_end:
+        while t_end is None or time.time() < t_end:
             trial += 1
-            y = _pack(base)
-            noise = rng.normal(0.0, seed_scale, size=y.shape)
-            # Mild period jitter via template copy
-            period = float(base.period) * float(np.exp(rng.normal(0.0, 0.02)))
-            start_tmpl = OrbitSeed(
-                id=base.id,
-                family=base.family,
-                n_bodies=base.n_bodies,
-                G=base.G,
-                masses=base.masses,
-                period=period,
-                positions=base.positions,
-                velocities=base.velocities,
-                names=base.names,
-                symmetry=base.symmetry,
-                source=base.source,
-                notes=base.notes,
-                central_index=None,
-            )
-            start = _unpack(y + noise, start_tmpl)
+            start = random_asymmetric_seed(n, rng)
             try:
                 polished, res_n = polish_seed(start, shift=shift, max_nfev=max_nfev)
-                gate = verify_choreography_Tn(
+                acc = accept_free_choreography(
                     polished.to_system(),
                     polished.period,
                     shift=shift,
                     atol_rel=1e-5,
                     n_outputs=24,
+                    ngon_samples=12,
                 )
-                ok = bool(gate.ok)
+                ok = bool(acc.ok)
                 path = None
+                if acc.maintains_regular_ngon:
+                    rejected_maintained += 1
                 if ok:
                     passed += 1
                     path = str(out_dir / f"pass_{n}_{trial:05d}.json")
@@ -240,43 +277,51 @@ def run_choreography_search(
                         positions=polished.positions,
                         velocities=polished.velocities,
                         names=polished.names,
-                        symmetry=polished.symmetry,
+                        symmetry="accepted_non_maintained_ngon",
                         source="choreography_search",
                         notes=f"trial={trial} residual={res_n:.3e}",
                         central_index=None,
-                        verification=gate.to_dict(),
+                        verification=acc.to_dict(),
                     )
                     save_seed(polished, Path(path))
-                if res_n < best_res:
-                    best_res = res_n
-                    best_seed = polished
-                    save_seed(polished, out_dir / "best.json")
+                    if res_n < best_res:
+                        best_res = res_n
+                        best_seed = polished
+                        save_seed(polished, out_dir / "best.json")
                 row = {
                     "trial": trial,
                     "residual": res_n,
                     "period": polished.period,
                     "ok_gate": ok,
+                    "reason": acc.reason,
+                    "maintains_regular_ngon": acc.maintains_regular_ngon,
                     "path": path,
-                    "t_left_s": max(0.0, t_end - time.time()),
+                    "t_left_s": None if t_end is None else max(0.0, t_end - time.time()),
                 }
                 logf.write(json.dumps(row) + "\n")
                 logf.flush()
-                trials.append(
-                    SearchTrial(
-                        trial=trial,
-                        residual=res_n,
-                        period=polished.period,
-                        ok_gate=ok,
-                        path=path,
-                    )
-                )
                 if on_progress:
                     on_progress(row)
+                # Self-expanding: keep a live summary for unlimited runs
+                summary = {
+                    "n": n,
+                    "trials": trial,
+                    "passed_gate": passed,
+                    "rejected_maintained_regular_ngon": rejected_maintained,
+                    "best_residual": best_res if best_seed is not None else None,
+                    "best_path": str(out_dir / "best.json") if best_seed is not None else None,
+                    "out_dir": str(out_dir),
+                    "wall_hours": wall_hours,
+                    "status": "running",
+                }
+                (out_dir / "summary.json").write_text(
+                    json.dumps(summary, indent=2), encoding="utf-8"
+                )
             except Exception as exc:  # pragma: no cover
                 row = {
                     "trial": trial,
                     "error": str(exc),
-                    "t_left_s": max(0.0, t_end - time.time()),
+                    "t_left_s": None if t_end is None else max(0.0, t_end - time.time()),
                 }
                 logf.write(json.dumps(row) + "\n")
                 logf.flush()
@@ -285,10 +330,12 @@ def run_choreography_search(
         "n": n,
         "trials": trial,
         "passed_gate": passed,
-        "best_residual": best_res if best_res < float("inf") else None,
+        "rejected_maintained_regular_ngon": rejected_maintained,
+        "best_residual": best_res if best_seed is not None else None,
         "best_path": str(out_dir / "best.json") if best_seed is not None else None,
         "out_dir": str(out_dir),
         "wall_hours": wall_hours,
+        "status": "done",
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return summary

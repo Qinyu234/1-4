@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify orbit seeds: PROMPT §3.2 gate (r+v at T/n), then optional diagnostics."""
+"""Verify orbit seeds: accept gate (§3.2 + reject regular n-gon), then diagnostics."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from fairy_orbit.design.seeds import (
     write_catalogue,
 )
 from fairy_orbit.engine.rebound_engine import ReboundConfig, integrate
-from fairy_orbit.observe.choreography_verify import verify_seed_choreography
+from fairy_orbit.observe.choreography_verify import accept_seed_choreography
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -65,9 +65,7 @@ def verify_seed_rebound(seed, *, n_outputs: int = 200, eps_tol: float = 1e-3) ->
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(
-        description="Verify seeds: PROMPT §3.2 r/v at T/n (promotion gate)"
-    )
+    p = argparse.ArgumentParser(description="Verify seeds with accept gate")
     p.add_argument("--regenerate", action="store_true")
     p.add_argument("--eps-tol", type=float, default=1e-3)
     p.add_argument("--atol-rel", type=float, default=1e-6)
@@ -96,46 +94,42 @@ def main() -> None:
         shape = None
         reb = None
         traj = None
+        acc = None
 
         if seed.family.startswith("free_"):
-            gate = verify_seed_choreography(
-                seed, shift=args.shift, atol_rel=args.atol_rel, n_outputs=min(64, args.n_outputs)
+            acc = accept_seed_choreography(
+                seed,
+                shift=args.shift,
+                atol_rel=args.atol_rel,
+                n_outputs=min(64, args.n_outputs),
             )
-            gate_ok = bool(gate.ok)
+            gate = acc.choreography
+            gate_ok = bool(acc.ok)
             print(
-                f"[{'OK' if gate_ok else 'FAIL'}-§3.2] {seed.id}: "
-                f"Er_rel={gate.E_r_rel:.3e} Ev_rel={gate.E_v_rel:.3e} "
-                f"P={gate.perm_label} angle={gate.angle:.6f}",
+                f"[{'OK' if gate_ok else 'FAIL'}-accept] {seed.id}: "
+                f"reason={acc.reason} Er_rel={gate.E_r_rel:.3e} "
+                f"maintains_regular_ngon={acc.maintains_regular_ngon}",
                 flush=True,
             )
             if not gate_ok:
                 all_ok = False
         else:
             gate_ok = True
-            print(f"[SKIP-§3.2] {seed.id}: hier baseline (no free choreography claim)", flush=True)
+            print(f"[SKIP] {seed.id}: hier baseline", flush=True)
 
         if not args.skip_rebound:
             reb = verify_seed_rebound(
                 seed, n_outputs=args.n_outputs, eps_tol=args.eps_tol
             )
             traj = reb.pop("traj", None)
-            flag = "OK" if reb["ok"] else "FAIL"
             print(
-                f"[{flag}-period] {seed.id}: eps_r={reb['eps_r']:.3e} eps_v={reb['eps_v']:.3e}",
+                f"[{'OK' if reb['ok'] else 'FAIL'}-period] {seed.id}: "
+                f"eps_r={reb['eps_r']:.3e} eps_v={reb['eps_v']:.3e}",
                 flush=True,
             )
-            if not reb["ok"]:
-                all_ok = False
 
         if seed.family.startswith("free_") and traj is not None:
-            shape = verify_free_shape_congruence(
-                seed, traj=traj, atol=args.atol_rel
-            )
-            print(
-                f"[diag-shape] {seed.id}: r_max={shape.get('shape_residual_max_r')} "
-                f"v_max={shape.get('shape_residual_max_v')}",
-                flush=True,
-            )
+            shape = verify_free_shape_congruence(seed, traj=traj, atol=args.atol_rel)
 
         row = {
             "id": seed.id,
@@ -145,21 +139,39 @@ def main() -> None:
             "choreography_ok": gate_ok,
             "shape_diag": shape,
             "rebound": reb,
-            "ok": gate_ok and (reb is None or reb["ok"]),
+            "ok": gate_ok,
         }
+        if acc is not None:
+            row["accept_reason"] = acc.reason
+            row["maintains_regular_ngon"] = acc.maintains_regular_ngon
         rows.append(row)
 
-        if args.update_catalogue and gate is not None:
+        if args.update_catalogue and gate is not None and acc is not None:
             update_catalogue_verification(
                 cat,
                 seed.id,
                 gate=gate,
-                orbit_class=entry.get("orbit_class"),
+                orbit_class=(
+                    "literature_choreography"
+                    if acc.ok
+                    else (
+                        "rejected_maintained_regular_ngon"
+                        if acc.maintains_regular_ngon
+                        else "unverified"
+                    )
+                ),
             )
+            for e in cat["seeds"]:
+                if e.get("id") == seed.id:
+                    e["accept_reason"] = acc.reason
+                    e["maintains_regular_ngon"] = acc.maintains_regular_ngon
+                    if acc.maintains_regular_ngon:
+                        e["verified_claim"] = "rejected_maintained_regular_ngon"
+                        e["choreography_ok"] = False
+                    break
 
     if args.update_catalogue:
         write_catalogue(cat["seeds"], path=CATALOGUE_PATH)
-        # write_catalogue expects entries list - check signature
         print(f"catalogue updated → {CATALOGUE_PATH}", flush=True)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

@@ -281,7 +281,7 @@ def correct_at_mass(
 def run_path_a_continuation(
     seed: OrbitSeed,
     *,
-    wall_hours: float = 8.0,
+    wall_hours: float | None = None,
     M_c_max: float = 1.0,
     dM0: float = 1e-3,
     shift: int = 1,
@@ -291,7 +291,8 @@ def run_path_a_continuation(
 ) -> dict[str, Any]:
     """
     Path A: raise M_c from 0 with adaptive step; each step LS-correct.
-    On failure: halve dM (fold-lite); stop at wall or M_c_max.
+    On failure: halve dM (fold-lite); stop at wall (if set) or M_c_max.
+    ``wall_hours=None`` / ``<=0`` means no wall clock limit.
     """
     import json
     import time
@@ -299,7 +300,11 @@ def run_path_a_continuation(
     out_dir = Path(out_dir or "experiments/output/continuation_n4")
     out_dir.mkdir(parents=True, exist_ok=True)
     log_path = out_dir / "steps.jsonl"
-    t_end = time.time() + float(wall_hours) * 3600.0
+    t_end = (
+        None
+        if wall_hours is None or float(wall_hours) <= 0
+        else time.time() + float(wall_hours) * 3600.0
+    )
 
     gate = verify_choreography_Tn(
         attach_central_mass(seed, 0.0), float(seed.period), shift=shift, atol_rel=1e-5
@@ -315,7 +320,7 @@ def run_path_a_continuation(
     steps = 0
     with log_path.open("a", encoding="utf-8") as logf:
         logf.write(json.dumps({"M_c": 0.0, "residual": 0.0, "ok": True, "note": "start"}) + "\n")
-        while time.time() < t_end and M_c < M_c_max - 1e-15:
+        while (t_end is None or time.time() < t_end) and M_c < M_c_max - 1e-15:
             target = min(M_c + dM, M_c_max)
             try:
                 nxt, res_n, ok = correct_at_mass(
@@ -334,7 +339,7 @@ def run_path_a_continuation(
                 "residual": res_n,
                 "ok": ok and res_n < res_tol,
                 "dM": dM,
-                "t_left_s": max(0.0, t_end - time.time()),
+                "t_left_s": None if t_end is None else max(0.0, t_end - time.time()),
             }
             logf.write(json.dumps(row) + "\n")
             logf.flush()
@@ -390,7 +395,7 @@ def scale_peripheral_masses(seed: OrbitSeed, mu: float) -> OrbitSeed:
 def run_path_b_mass_scan(
     seed: OrbitSeed,
     *,
-    wall_hours: float = 8.0,
+    wall_hours: float | None = None,
     mu_min: float = 1e-3,
     n_log_steps: int = 40,
     shift: int = 1,
@@ -401,6 +406,7 @@ def run_path_b_mass_scan(
     """
     Path B-style: fix one mass=1, sweep other masses μ in logspace downward.
     Uses free-5 choreography seed (no separate central); body 0 is the 'center' role.
+    ``wall_hours=None`` / ``<=0`` means no wall clock limit.
     """
     import json
     import time
@@ -408,7 +414,11 @@ def run_path_b_mass_scan(
     out_dir = Path(out_dir or "experiments/output/continuation_n5")
     out_dir.mkdir(parents=True, exist_ok=True)
     log_path = out_dir / "steps.jsonl"
-    t_end = time.time() + float(wall_hours) * 3600.0
+    t_end = (
+        None
+        if wall_hours is None or float(wall_hours) <= 0
+        else time.time() + float(wall_hours) * 3600.0
+    )
 
     # At μ=1 equal-mass: require §3.2 gate
     eq = scale_peripheral_masses(seed, 1.0)
@@ -441,7 +451,7 @@ def run_path_b_mass_scan(
     done = 0
     with log_path.open("a", encoding="utf-8") as logf:
         for mu in mus:
-            if time.time() >= t_end:
+            if t_end is not None and time.time() >= t_end:
                 break
             # Residual with unequal masses: still use same geometric §3.2 on all bodies
             # via M_c=0 attach (no extra central) + correct_at_mass with M_c=0 but
@@ -491,7 +501,7 @@ def run_path_b_mass_scan(
                 "mu": float(mu),
                 "residual": res_n,
                 "ok": ok and res_n < res_tol,
-                "t_left_s": max(0.0, t_end - time.time()),
+                "t_left_s": None if t_end is None else max(0.0, t_end - time.time()),
             }
             logf.write(json.dumps(row) + "\n")
             logf.flush()

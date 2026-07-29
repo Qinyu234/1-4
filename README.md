@@ -18,16 +18,22 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\pip install -e .
 ```
 
-## Error experiments (kept)
-
-Integrator floors + Td group-orbit error base (exponential normalize).
+## PROMPT mainline
 
 ```powershell
-.\.venv\Scripts\python scripts\run_campaign.py smoke
-.\.venv\Scripts\python scripts\run_campaign.py calib
-.\.venv\Scripts\python scripts\run_campaign.py td_group --smoke
-.\.venv\Scripts\python scripts\run_campaign.py td_beta_e --smoke
-.\.venv\Scripts\python scripts\run_campaign.py td_growth
+# Self-expanding choreography search (default: unlimited wall)
+.\.venv\Scripts\python.exe scripts\run_campaign.py prompt
+.\.venv\Scripts\python.exe scripts\run_campaign.py prompt --wall-hours 12
+.\.venv\Scripts\python.exe scripts\run_campaign.py prompt --smoke
+```
+
+## Legacy Td probes
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_campaign.py calib
+.\.venv\Scripts\python.exe scripts\run_campaign.py td_group --smoke
+.\.venv\Scripts\python.exe scripts\run_campaign.py td_beta_e --smoke
+.\.venv\Scripts\python.exe scripts\run_campaign.py td_growth
 ```
 
 Outputs under `experiments/output/`:

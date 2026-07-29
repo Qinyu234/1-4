@@ -273,24 +273,13 @@ def update_catalogue_verification(
 
 
 def regenerate_canonical_seeds() -> list[OrbitSeed]:
-    """Rebuild committed free_4 / free_5 / hier_1plus4 JSON + catalogue."""
+    """Rebuild catalogue — regular polygon RE seeds are not stored (rejected)."""
     seeds = [
-        build_free_polygon_seed(4, seed_id="free_4_square_re", family="free_4"),
-        build_free_polygon_seed(5, seed_id="free_5_pentagon_re", family="free_5"),
         build_hier_1plus4_manifold_seed(),
     ]
     entries = []
     for s in seeds:
         save_seed(s)
-        if s.family.startswith("free_"):
-            orbit_class = "free_relative_equilibrium"
-            verified_claim = "pending_prompt_3_2"
-        elif s.family.startswith("hier_"):
-            orbit_class = "hier_baseline_ic"
-            verified_claim = "none_periodic_not_claimed"
-        else:
-            orbit_class = "unclassified"
-            verified_claim = "unknown"
         entries.append(
             {
                 "id": s.id,
@@ -299,9 +288,9 @@ def regenerate_canonical_seeds() -> list[OrbitSeed]:
                 "n_bodies": s.n_bodies,
                 "period": s.period,
                 "symmetry": s.symmetry,
-                "path_hint": "A" if s.family.startswith("free_") else "B",
-                "orbit_class": orbit_class,
-                "verified_claim": verified_claim,
+                "path_hint": "B",
+                "orbit_class": "hier_baseline_ic",
+                "verified_claim": "none_periodic_not_claimed",
             }
         )
     write_catalogue(entries)

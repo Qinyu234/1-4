@@ -36,6 +36,11 @@ from fairy_orbit.observe.error_base import (
 )
 from fairy_orbit.observe.choreography_verify import (
     ChoreographyVerifyResult,
+    OrbitAcceptResult,
+    accept_free_choreography,
+    accept_seed_choreography,
+    is_regular_equal_ngon,
+    maintains_regular_equal_ngon,
     verify_choreography_Tn,
     verify_seed_choreography,
 )
@@ -116,6 +121,11 @@ __all__ = [
     "PEOFilterResult",
     "evaluate_peo",
     "ChoreographyVerifyResult",
+    "OrbitAcceptResult",
     "verify_choreography_Tn",
     "verify_seed_choreography",
+    "accept_free_choreography",
+    "accept_seed_choreography",
+    "is_regular_equal_ngon",
+    "maintains_regular_equal_ngon",
 ]

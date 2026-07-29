@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin launcher: PEO mainline + legacy Td modes."""
+"""Thin launcher: PROMPT mainline + legacy Td modes."""
 
 from __future__ import annotations
 
@@ -27,12 +27,9 @@ def main() -> None:
     parser.add_argument(
         "mode",
         choices=[
-            "staged",
-            "heatmap",
-            "beam",
-            "campaign",
-            "peo_smoke",
-            "rep_error",
+            "prompt",
+            "choreo4",
+            "choreo5",
             # legacy Td
             "calib",
             "td_group",
@@ -41,49 +38,59 @@ def main() -> None:
             "td_growth",
             "td_dense",
         ],
-        help="staged|heatmap|beam|campaign|peo_smoke|rep_error | legacy: calib|td_*",
+        help="prompt|choreo4|choreo5 | legacy: calib|td_*",
     )
     parser.add_argument("--smoke", action="store_true")
-    parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--wall-hours", type=float, default=None)
+    parser.add_argument(
+        "--wall-hours",
+        type=float,
+        default=0.0,
+        help="optional wall clock hours; <=0 unlimited (default)",
+    )
+    parser.add_argument("--fresh", action="store_true")
+    parser.add_argument("--wait", action="store_true")
     args = parser.parse_args()
 
-    if args.mode == "staged":
-        cmd = [_py(), str(ACTIVE / "run_staged_peo.py")]
-        if args.smoke:
-            cmd.append("--smoke")
+    if args.mode == "prompt":
+        cmd = [_py(), str(ACTIVE / "run_prompt_campaign.py"), "--wall-hours", str(args.wall_hours)]
+        if args.fresh:
+            cmd.append("--fresh")
+        if args.wait or args.smoke:
+            cmd.append("--wait")
+        if args.smoke and args.wall_hours <= 0:
+            # smoke: short wall so it can finish under --wait
+            cmd = [
+                _py(),
+                str(ACTIVE / "run_prompt_campaign.py"),
+                "--wall-hours",
+                "0.01",
+                "--wait",
+            ]
+            if args.fresh:
+                cmd.append("--fresh")
         raise SystemExit(run(cmd))
 
-    if args.mode == "heatmap":
-        cmd = [_py(), str(ACTIVE / "run_me_heatmap.py"), "--levels", "3", "--nm0", "6", "--ne0", "5"]
-        if args.resume:
-            cmd.append("--resume")
+    if args.mode == "choreo4":
+        cmd = [
+            _py(),
+            str(ACTIVE / "run_choreography_search.py"),
+            "--n",
+            "4",
+            "--wall-hours",
+            str(args.wall_hours),
+        ]
         raise SystemExit(run(cmd))
 
-    if args.mode == "beam":
-        cmd = [_py(), str(ACTIVE / "run_long_campaign.py"), "--skip-rep-error", "--wide-bounds"]
-        if args.smoke:
-            cmd += ["--wall-min", "5", "--plateau-rounds", "3"]
+    if args.mode == "choreo5":
+        cmd = [
+            _py(),
+            str(ACTIVE / "run_choreography_search.py"),
+            "--n",
+            "5",
+            "--wall-hours",
+            str(args.wall_hours),
+        ]
         raise SystemExit(run(cmd))
-
-    if args.mode == "campaign":
-        cmd = [_py(), str(ACTIVE / "run_10h_campaign.py"), "--skip-rep-error"]
-        if args.wall_hours is not None:
-            cmd += ["--wall-hours", str(args.wall_hours)]
-        if args.resume:
-            cmd.append("--resume-heatmap")
-        if args.smoke:
-            cmd += ["--wall-hours", "0.05", "--levels", "1", "--nm0", "3", "--ne0", "3", "--cell-evals", "40"]
-        raise SystemExit(run(cmd))
-
-    if args.mode == "peo_smoke":
-        cmd = [_py(), str(ACTIVE / "run_peo_smoke.py")]
-        if args.smoke:
-            cmd.append("--smoke")
-        raise SystemExit(run(cmd))
-
-    if args.mode == "rep_error":
-        raise SystemExit(run([_py(), str(ACTIVE / "run_rep_error_scan.py")]))
 
     legacy_map = {
         "calib": "run_calibration.py",

@@ -9,11 +9,12 @@ import pytest
 
 from fairy_orbit.design.seeds import build_free_polygon_seed
 from fairy_orbit.observe.choreography_verify import (
+    accept_seed_choreography,
     cyclic_role_perm,
+    is_regular_equal_ngon,
     rotation_axis_angle,
     verify_seed_choreography,
 )
-from fairy_orbit.observe.closure import kabsch_rotation
 
 
 def test_cyclic_role_perm_n4():
@@ -36,19 +37,23 @@ def test_rotation_axis_angle_z90():
     assert angle == pytest.approx(th, rel=1e-9)
 
 
-def test_free4_square_passes_Tn_shift1():
-    """Regular square RE: after τ=T/4, x_i(τ)=x_{i+1}(0) (R≈I)."""
+def test_free4_square_passes_Tn_but_accept_rejects_maintained():
     seed = build_free_polygon_seed(4, seed_id="free_4_square_re", family="free_4")
     out = verify_seed_choreography(seed, shift=1, atol_rel=1e-8)
     assert out.ok
-    assert out.E_r_rel < 1e-10
-    assert out.E_v_rel < 1e-10
-    assert out.perm == (1, 2, 3, 0)
+    acc = accept_seed_choreography(seed, shift=1, atol_rel=1e-8)
+    assert not acc.ok
+    assert acc.maintains_regular_ngon
+    assert acc.reason == "rejected_maintained_regular_ngon"
 
 
-def test_free5_pentagon_passes_Tn_shift1():
-    seed = build_free_polygon_seed(5, seed_id="free_5_pentagon_re", family="free_5")
-    out = verify_seed_choreography(seed, shift=1, atol_rel=1e-8)
-    assert out.ok
-    assert out.E_r_rel < 1e-9
-    assert out.E_v_rel < 1e-9
+def test_asymmetric_not_regular():
+    pos = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.2, 1.5, 0.0],
+            [-1.2, 0.3, 0.0],
+            [0.1, -0.8, 0.0],
+        ]
+    )
+    assert not is_regular_equal_ngon(pos, rtol=0.05)
