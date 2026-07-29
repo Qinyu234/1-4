@@ -4,11 +4,11 @@ Per Stage-A seed (m, e), anchors:
 
     a0 = 1,  e0 = e,  M0 = 0,  μ = m
 
-Linear polys: q_i = q0 + i q1  (no quadratic a2/e2/M2).
+Linear polys by default; quadratic a2/e2/M2 and linear-in-i kick v1 unlock
+in Bayesian staged search (order a → e → M → v).
 
-Td-symmetric velocity kick: δv_i = R_i · (vx, vy, vz).
-
-Free knobs (6D): a1, e1, M1, vx, vy, vz
+Free knobs (beam base 6D): a1, e1, M1, vx, vy, vz
+Optional: a2, e2, M2, v1x, v1y, v1z
 
 IC is built in the inertial COM frame.
 """
@@ -30,6 +30,9 @@ from fairy_orbit.observe.rep_error import RepSigmas
 LOSS_FAIL = 1e12
 
 FREE_NAMES: tuple[str, ...] = ("a1", "e1", "M1", "vx", "vy", "vz")
+QUAD_ORDER: tuple[str, ...] = ("a2", "e2", "M2")  # unlock a → e → M
+V1_NAMES: tuple[str, ...] = ("v1x", "v1y", "v1z")  # unlock last (v 三参高阶)
+ALL_FREE_NAMES: tuple[str, ...] = FREE_NAMES + QUAD_ORDER + V1_NAMES
 A0_FIXED: float = 1.0
 M0_FIXED: float = 0.0
 
@@ -42,16 +45,22 @@ class FreeParams:
     vx: float
     vy: float
     vz: float
+    a2: float = 0.0
+    e2: float = 0.0
+    M2: float = 0.0
+    v1x: float = 0.0
+    v1y: float = 0.0
+    v1z: float = 0.0
 
     def as_dict(self) -> dict[str, float]:
-        return {k: float(getattr(self, k)) for k in FREE_NAMES}
+        return {k: float(getattr(self, k)) for k in ALL_FREE_NAMES}
 
     def key(self, ndigits: int = 10) -> tuple[float, ...]:
-        return tuple(round(float(getattr(self, k)), ndigits) for k in FREE_NAMES)
+        return tuple(round(float(getattr(self, k)), ndigits) for k in ALL_FREE_NAMES)
 
     def with_update(self, **kwargs: float) -> FreeParams:
         d = self.as_dict()
-        d.update({k: float(v) for k, v in kwargs.items() if k in FREE_NAMES})
+        d.update({k: float(v) for k, v in kwargs.items() if k in ALL_FREE_NAMES})
         return FreeParams(**d)
 
 
@@ -65,6 +74,23 @@ class SeedAnchors:
         return self.e
 
 
+# Absolute clamps for adaptive bound expansion (physics / sanity).
+HARD_BOUNDS: dict[str, tuple[float, float]] = {
+    "a1": (0.02, 2.0),
+    "e1": (-0.25, 0.35),
+    "M1": (0.0, 12.0),
+    "vx": (-0.5, 0.5),
+    "vy": (-0.5, 0.5),
+    "vz": (-0.5, 0.5),
+    "a2": (-0.15, 0.15),
+    "e2": (-0.08, 0.08),
+    "M2": (-2.0, 2.0),
+    "v1x": (-0.2, 0.2),
+    "v1y": (-0.2, 0.2),
+    "v1z": (-0.2, 0.2),
+}
+
+
 @dataclass(frozen=True)
 class SearchBounds:
     """a1>0 for radial ladder; (vx,vy,vz) small vs circular speed ~1."""
@@ -75,6 +101,12 @@ class SearchBounds:
     vx: tuple[float, float] = (-0.05, 0.05)
     vy: tuple[float, float] = (-0.05, 0.05)
     vz: tuple[float, float] = (-0.05, 0.05)
+    a2: tuple[float, float] = (-0.05, 0.05)
+    e2: tuple[float, float] = (-0.03, 0.03)
+    M2: tuple[float, float] = (-1.0, 1.0)
+    v1x: tuple[float, float] = (-0.05, 0.05)
+    v1y: tuple[float, float] = (-0.05, 0.05)
+    v1z: tuple[float, float] = (-0.05, 0.05)
 
     def span(self, name: str) -> float:
         lo, hi = getattr(self, name)
@@ -86,6 +118,70 @@ class SearchBounds:
 
     def center(self) -> FreeParams:
         return FreeParams(**{k: 0.5 * (getattr(self, k)[0] + getattr(self, k)[1]) for k in FREE_NAMES})
+
+    def near_edges(
+        self,
+        params: FreeParams | dict[str, float],
+        *,
+        frac: float = 0.05,
+    ) -> dict[str, str]:
+        """
+        Axes where value sits within `frac` of the local span from an edge.
+
+        Returns {name: 'lo'|'hi'} (hi wins if both somehow match).
+        """
+        if isinstance(params, FreeParams):
+            vals = params.as_dict()
+        else:
+            vals = {k: float(params[k]) for k in FREE_NAMES}
+        out: dict[str, str] = {}
+        for name in FREE_NAMES:
+            lo, hi = getattr(self, name)
+            span = max(hi - lo, 1e-15)
+            tol = frac * span
+            v = float(vals[name])
+            if v <= lo + tol:
+                out[name] = "lo"
+            elif v >= hi - tol:
+                out[name] = "hi"
+        return out
+
+    def expand_edges(
+        self,
+        edges: dict[str, str],
+        *,
+        grow: float = 0.5,
+        hard: dict[str, tuple[float, float]] | None = None,
+    ) -> tuple["SearchBounds", dict[str, tuple[float, float]]]:
+        """
+        Expand each edged axis by `grow * span` on that side, clamped to HARD_BOUNDS.
+
+        Returns (new_bounds, {name: (old_lo_hi, new_lo_hi) changes}).
+        """
+        hard = hard or HARD_BOUNDS
+        kwargs = {k: getattr(self, k) for k in ALL_FREE_NAMES}
+        changed: dict[str, tuple[float, float]] = {}
+        for name, side in edges.items():
+            if name not in FREE_NAMES:
+                continue
+            lo, hi = kwargs[name]
+            span = max(hi - lo, 1e-15)
+            delta = grow * span
+            hlo, hhi = hard[name]
+            if side == "lo":
+                new_lo = max(hlo, lo - delta)
+                new_hi = hi
+            elif side == "hi":
+                new_lo = lo
+                new_hi = min(hhi, hi + delta)
+            else:
+                continue
+            if new_lo >= new_hi:
+                continue
+            if (new_lo, new_hi) != (lo, hi):
+                kwargs[name] = (float(new_lo), float(new_hi))
+                changed[name] = (float(new_lo), float(new_hi))
+        return SearchBounds(**kwargs), changed
 
 
 @dataclass(frozen=True)
@@ -145,13 +241,19 @@ def to_manifold(seed: SeedAnchors, free: FreeParams) -> ManifoldParams:
     return ManifoldParams(
         a0=A0_FIXED,
         a1=free.a1,
+        a2=free.a2,
         e0=seed.e,
         e1=free.e1,
+        e2=free.e2,
         M0=M0_FIXED,
         M1=free.M1,
+        M2=free.M2,
         vx=free.vx,
         vy=free.vy,
         vz=free.vz,
+        v1x=free.v1x,
+        v1y=free.v1y,
+        v1z=free.v1z,
         mu_mass=seed.m,
     )
 

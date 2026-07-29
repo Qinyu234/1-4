@@ -14,13 +14,19 @@ from fairy_orbit.core.criteria import SimulationStatus, check_escape
 from fairy_orbit.design.manifold import ManifoldParams, build_manifold_system
 from fairy_orbit.engine.rebound_engine import ReboundConfig, integrate
 from fairy_orbit.engine.trajectory import Trajectory
-from fairy_orbit.observe.closure import ClosureSeries, radial_order
+from fairy_orbit.observe.closure import (
+    ClosureSeries,
+    choreography_gate,
+    closure_series,
+    radial_order,
+)
 from fairy_orbit.observe.rep_error import (
     CHANNELS,
     SEARCH_SCORE_WEIGHTS,
     RepErrorSeries,
     RepSigmas,
     apply_sigmas,
+    is_calibrated_sigmas,
     rep_error_series,
     weighted_score,
 )
@@ -46,16 +52,24 @@ def evaluate_peo(
     sigmas: RepSigmas | Path | str | None = None,
     perm_mode: str = "fixed_radial",
     score_weights: dict[str, float] | None = None,
+    skip_choreography_gate: bool = False,
+    require_calibrated_sigmas: bool = False,
 ) -> PEOFilterResult:
     """
     PEO check in inertial COM frame (translation removed at IC):
       Level 0: escape (collision off).
-      Level 1: fix P from radial order S(T) vs S(0).
-      Level 2–3: E_r/E_v + elements with Φ_T(X)≈(R*,P)X₀.
+      Level 1: at each t, S(t) cyclic-shift of S(0); at T require non-identity
+               shift (ABCD→BCDA/CDAB/DABC). Fail → reject like escape.
+      Level 2–3: raw base E_r/E_v/… then σ-weighted score only if Level 1 passes.
     """
     if isinstance(sigmas, (str, Path)):
         sigmas = RepSigmas.from_json(sigmas)
     sigmas = sigmas or RepSigmas(source="unit_default")
+    if require_calibrated_sigmas and not is_calibrated_sigmas(sigmas):
+        raise ValueError(
+            f"detailed score requires Stage-A calibrated sigmas "
+            f"(got source={sigmas.source!r}, n_samples={sigmas.n_samples})"
+        )
     weights = score_weights if score_weights is not None else SEARCH_SCORE_WEIGHTS
 
     system = build_manifold_system(params)
@@ -90,10 +104,33 @@ def evaluate_peo(
             summary={"status": "escape", "t_end": float(traj.times[-1])},
         )
 
+    gate = None
+    if not skip_choreography_gate:
+        gate = choreography_gate(traj, perm_mode)
+        if not gate.ok:
+            return PEOFilterResult(
+                status="choreography",
+                traj=traj,
+                closure=None,
+                closure_rep=None,
+                params=params,
+                summary={
+                    "status": "choreography",
+                    "reason": gate.reason,
+                    "perm_mode": perm_mode,
+                    "order_0": list(gate.order_0),
+                    "order_final": list(gate.order_final),
+                    "choreography_shift_k": gate.shift_final,
+                    "t_end": float(traj.times[-1]),
+                },
+            )
+
     series = rep_error_series(traj, mode=perm_mode)
     finals = series.final_snapshot()
     tilde = apply_sigmas(finals, sigmas)
     score = weighted_score(tilde, weights)
+
+    closure_diag = closure_series(traj, mode=perm_mode)
 
     # Soft penalty: equal-a IC cannot realize radial choreography
     a_vals = [params.a0 + i * params.a1 for i in range(4)]
@@ -109,13 +146,16 @@ def evaluate_peo(
         R_final=series.R_final,
         order_0=series.order_0,
         order_final=series.order_final,
-        choreography_ok=True,
+        choreography_ok=closure_diag.choreography_ok,
     )
 
     summary = {
         "status": "success",
         "t_end": float(traj.times[-1]),
         "perm": list(series.perm),
+        "perm_mode": perm_mode,
+        "choreography_ok": closure_diag.choreography_ok,
+        "choreography_shift_k": None if gate is None else gate.shift_final,
         "order_0": list(series.order_0),
         "order_final": list(series.order_final),
         "score": score,
@@ -139,7 +179,9 @@ def evaluate_peo(
     )
 
 
-def check_radial_choreography(traj: Trajectory) -> tuple[bool, tuple[int, ...], tuple[int, ...]]:
-    o0 = radial_order(traj.positions[0])
-    oT = radial_order(traj.positions[-1])
-    return True, o0, oT
+def check_radial_choreography(
+    traj: Trajectory,
+    perm_mode: str = "fixed_radial",
+) -> tuple[bool, tuple[int, ...], tuple[int, ...]]:
+    gate = choreography_gate(traj, perm_mode)
+    return gate.ok, gate.order_0, gate.order_final

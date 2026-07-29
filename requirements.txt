@@ -2,5 +2,6 @@ numpy>=1.26
 scipy>=1.11
 matplotlib>=3.8
 rebound>=4.4,<5
+optuna>=3.6
 pytest>=7.4
 beautifulsoup4>=4.12

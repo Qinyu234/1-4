@@ -12,6 +12,7 @@ dependencies = [
   "scipy>=1.11",
   "matplotlib>=3.8",
   "rebound>=4.4,<5",  # v5 python bindings don't expose ri_ias15 (epsilon/min_dt) yet
+  "optuna>=3.6",
 ]
 
 [project.optional-dependencies]

@@ -68,6 +68,21 @@ def test_grid_beam_finds_bowl_minimum():
     assert res.best.params.vx == pytest.approx(0.01, abs=0.015)
 
 
-def test_poly_nearest_orbit():
-    assert poly_linear(1.0, 0.1, 0) == pytest.approx(1.0)
-    assert poly_linear(1.0, 0.1, 3) == pytest.approx(1.3)
+def test_free_params_optional_quad_defaults():
+    f = FreeParams(0.12, 0.0, 1.0, 0.0, 0.0, 0.0)
+    assert f.a2 == 0.0 and f.v1z == 0.0
+    assert "a2" in f.as_dict()
+
+
+def test_near_edges_and_expand():
+    b = SearchBounds(a1=(0.10, 0.30), e1=(-0.02, 0.04), M1=(0.5, 6.0), vx=(-0.05, 0.05), vy=(-0.05, 0.05), vz=(-0.05, 0.05))
+    edges = b.near_edges(FreeParams(0.30, 0.04, 3.0, 0.0, -0.05, 0.05), frac=0.05)
+    assert edges["a1"] == "hi"
+    assert edges["e1"] == "hi"
+    assert edges["vy"] == "lo"
+    assert edges["vz"] == "hi"
+    assert "M1" not in edges
+    b2, changed = b.expand_edges(edges, grow=0.5)
+    assert b2.a1[1] > b.a1[1]
+    assert b2.vy[0] < b.vy[0]
+    assert "a1" in changed

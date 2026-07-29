@@ -10,7 +10,7 @@ import argparse
 import json
 from pathlib import Path
 
-from fairy_orbit.observe.rep_error import RepSigmas
+from fairy_orbit.observe.rep_error import load_required_sigmas
 from fairy_orbit.observe.search import (
     BeamConfig,
     SearchBounds,
@@ -63,7 +63,7 @@ def main() -> None:
         args.max_evals = 200
 
     seeds = _parse_pairs(args.seeds)
-    sigmas = RepSigmas.from_json(args.sigmas) if args.sigmas.exists() else RepSigmas(source="unit")
+    sigmas = load_required_sigmas(args.sigmas)
     out = args.out
     out.mkdir(parents=True, exist_ok=True)
 

@@ -18,10 +18,13 @@ import numpy as np
 from fairy_orbit.design.elements import OrbitalElements
 from fairy_orbit.engine.trajectory import Trajectory
 from fairy_orbit.observe.closure import (
+    ROLE_CYCLIC_PERMS,
     closure_for_perm,
     fairy_states,
     radial_order,
     radial_permutation,
+    resolve_perm,
+    role_cyclic_perms,
 )
 
 CHANNELS: tuple[str, ...] = (
@@ -33,6 +36,11 @@ CHANNELS: tuple[str, ...] = (
     "E_Omega",
     "E_omega",
     "E_M",
+)
+
+# Sources that are not Stage-A calibrated — forbidden for detailed score paths.
+UNIT_SIGMA_SOURCES: frozenset[str] = frozenset(
+    {"unit", "unit_default", "unit_fallback", "empty", ""}
 )
 
 
@@ -221,15 +229,18 @@ def rep_error_series(
     order_f = radial_order(traj.positions[-1], central_index=central_index)
     radial_perm = radial_permutation(order_f, order_0)
 
-    if mode == "fixed":
-        if perm is None:
-            raise ValueError("mode='fixed' requires perm")
-    elif mode == "identity":
-        perm = tuple(range(len(r_ref)))
-    elif mode == "fixed_radial":
-        perm = radial_perm
+    if mode == "best_cyclic":
+        rT, vT = fairy_states(traj, len(traj) - 1, central_index=central_index, frame="com")
+        best_p = None
+        best_er = float("inf")
+        for p in [ROLE_CYCLIC_PERMS["id"], *role_cyclic_perms()]:
+            res = closure_for_perm(rT, vT, r_ref, v_ref, p)
+            if res.E_r < best_er:
+                best_er = res.E_r
+                best_p = p
+        perm = best_p if best_p is not None else tuple(range(len(r_ref)))
     else:
-        raise ValueError(f"unknown mode {mode!r}")
+        perm = resolve_perm(mode, n=len(r_ref), radial_perm=radial_perm, perm=perm)
 
     T = len(traj)
     ch = {k: np.empty(T) for k in CHANNELS}
@@ -311,6 +322,36 @@ def compute_sigmas(
         n_samples=len(samples),
         source=source,
     )
+
+
+def is_calibrated_sigmas(sigmas: RepSigmas) -> bool:
+    return (
+        sigmas.n_samples > 0
+        and str(sigmas.source) not in UNIT_SIGMA_SOURCES
+        and not str(sigmas.source).startswith("unit")
+    )
+
+
+def load_required_sigmas(path: Path | str) -> RepSigmas:
+    """
+    Load Stage-A σ; hard-fail if missing or uncalibrated.
+
+    Detailed score paths must call this (or pass an already-calibrated RepSigmas)
+    before weighted_score — never silent unit defaults.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Stage-A base error (sigmas) required but missing: {path}. "
+            "Run experiments/run_rep_error_scan.py (then fit_rep_sigmas if needed) first."
+        )
+    sigmas = RepSigmas.from_json(path)
+    if not is_calibrated_sigmas(sigmas):
+        raise ValueError(
+            f"sigmas at {path} are not Stage-A calibrated "
+            f"(source={sigmas.source!r}, n_samples={sigmas.n_samples})."
+        )
+    return sigmas
 
 
 def apply_sigmas(
