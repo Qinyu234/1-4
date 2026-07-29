@@ -7,6 +7,10 @@ __pycache__/
 dist/
 build/
 
+# Prompt / notes (Windsurf scratch; seeded empty then ignored)
+PROMPT.md
+RESPONSE.md
+
 # Experiment data & artifacts
 experiments/output/
 orbit_library/*.json
