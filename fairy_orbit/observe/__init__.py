@@ -34,6 +34,11 @@ from fairy_orbit.observe.error_base import (
     log_excess_error,
     normalize_error,
 )
+from fairy_orbit.observe.choreography_verify import (
+    ChoreographyVerifyResult,
+    verify_choreography_Tn,
+    verify_seed_choreography,
+)
 from fairy_orbit.observe.peo import PEOFilterResult, evaluate_peo
 from fairy_orbit.observe.rep_error import (
     CHANNELS,
@@ -110,4 +115,7 @@ __all__ = [
     "result_to_dict",
     "PEOFilterResult",
     "evaluate_peo",
+    "ChoreographyVerifyResult",
+    "verify_choreography_Tn",
+    "verify_seed_choreography",
 ]

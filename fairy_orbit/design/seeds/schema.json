@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fairy-orbit.local/schemas/orbit_seed.json",
+  "title": "OrbitSeed",
+  "type": "object",
+  "required": [
+    "id",
+    "family",
+    "n_bodies",
+    "G",
+    "masses",
+    "period",
+    "positions",
+    "velocities",
+    "names",
+    "symmetry",
+    "source"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "family": {
+      "type": "string",
+      "enum": ["free_4", "free_5", "hier_1plus4", "hier_1plusN", "other"]
+    },
+    "n_bodies": { "type": "integer", "minimum": 2 },
+    "G": { "type": "number", "exclusiveMinimum": 0 },
+    "masses": {
+      "type": "array",
+      "items": { "type": "number", "exclusiveMinimum": 0 },
+      "minItems": 2
+    },
+    "period": { "type": "number", "exclusiveMinimum": 0 },
+    "positions": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "type": "number" },
+        "minItems": 3,
+        "maxItems": 3
+      }
+    },
+    "velocities": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "type": "number" },
+        "minItems": 3,
+        "maxItems": 3
+      }
+    },
+    "names": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "symmetry": { "type": "string" },
+    "source": { "type": "string" },
+    "notes": { "type": "string" },
+    "central_index": { "type": ["integer", "null"], "minimum": 0 },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "eps_r": { "type": "number" },
+        "eps_v": { "type": "number" },
+        "E_r_rel": { "type": "number" },
+        "E_v_rel": { "type": "number" },
+        "perm": {
+          "type": "array",
+          "items": { "type": "integer" }
+        },
+        "perm_label": { "type": "string" },
+        "R_axis": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "R_angle": { "type": "number" },
+        "tau": { "type": "number" },
+        "n_outputs": { "type": "integer" },
+        "ok": { "type": "boolean" }
+      }
+    }
+  },
+  "additionalProperties": true
+}

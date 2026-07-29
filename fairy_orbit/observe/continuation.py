@@ -1,0 +1,515 @@
+"""Mass continuation stub (PROMPT §2.5 Path A).
+
+Not black-box search: residual F(X,T; M_c) from Φ_T + §3.2 closure,
+corrected by scipy least_squares (Newton-ish). Pseudo-arclength TBD.
+
+Diagnostic: compare residual to M_c=0 seed (raw). First-order perturbation
+baseline is TODO per PROMPT §2.5.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from scipy.optimize import least_squares
+
+from fairy_orbit.core.body import Body, System, to_com_inertial_frame
+from fairy_orbit.design.seeds import OrbitSeed, load_seed, save_seed, SEEDS_DIR
+from fairy_orbit.engine.rebound_engine import ReboundConfig, integrate
+from fairy_orbit.observe.choreography_verify import (
+    ChoreographyVerifyResult,
+    cyclic_role_perm,
+    verify_choreography_Tn,
+)
+from fairy_orbit.observe.closure import closure_for_perm
+
+
+def attach_central_mass(seed: OrbitSeed, M_c: float) -> System:
+    """
+    Build COM-frame system: central mass at origin + seed bodies.
+
+    At M_c=0 the central is a massless tracer (still present for bookkeeping);
+    Newton forces ignore m=0 partners equivalently if we omit it — we keep a
+    tiny floor only when M_c==0 to avoid zero-mass REBOUND issues? Prefer omit
+    central when M_c==0 for exact free dynamics.
+    """
+    fairies = [
+        Body(
+            mass=float(seed.masses[i]),
+            position=np.asarray(seed.positions[i], dtype=float).copy(),
+            velocity=np.asarray(seed.velocities[i], dtype=float).copy(),
+            name=seed.names[i] if i < len(seed.names) else f"B{i}",
+        )
+        for i in range(seed.n_bodies)
+    ]
+    if M_c <= 0.0:
+        sys = System(bodies=fairies, G=float(seed.G))
+    else:
+        central = Body(
+            mass=float(M_c),
+            position=np.zeros(3),
+            velocity=np.zeros(3),
+            name="C",
+        )
+        sys = System(bodies=[central, *fairies], G=float(seed.G))
+    to_com_inertial_frame(sys)
+    return sys
+
+
+def _fairy_slice(sys: System, seed: OrbitSeed) -> tuple[np.ndarray, np.ndarray]:
+    """Positions/velocities of the N free bodies (skip central if present)."""
+    if len(sys.bodies) == seed.n_bodies:
+        return sys.positions(), sys.velocities()
+    # central at index 0
+    pos = np.stack([b.position for b in sys.bodies[1:]])
+    vel = np.stack([b.velocity for b in sys.bodies[1:]])
+    return pos, vel
+
+
+def symmetry_residual_vector(
+    sys: System,
+    seed: OrbitSeed,
+    period: float,
+    *,
+    shift: int = 1,
+    n_outputs: int = 16,
+) -> np.ndarray:
+    """
+    Flattened residual of §3.2 on the fairy subset after integrating τ=T/n.
+
+    F = stack_i ( r_i(τ) - R r_{P(i)}(0),  v_i(τ) - R v_{P(i)}(0) ).
+    """
+    n = seed.n_bodies
+    tau = float(period) / n
+    perm = cyclic_role_perm(n, shift=shift)
+    r0, v0 = _fairy_slice(sys, seed)
+    cfg = ReboundConfig(
+        stop_on_escape=False,
+        stop_on_collision=False,
+        # Fixed dt when a light central is present — IAS15 adaptive can stall
+        # on near-symmetric 1+N configurations.
+        epsilon=0.0,
+        dt=2e-3,
+        min_dt=1e-5,
+    )
+    traj = integrate(sys, t_end=tau, n_outputs=n_outputs, config=cfg)
+    # fairy indices in traj: if central present, bodies 1..n
+    if traj.n_bodies == n:
+        r = traj.positions[-1]
+        v = traj.velocities[-1]
+    else:
+        r = traj.positions[-1, 1 : n + 1]
+        v = traj.velocities[-1, 1 : n + 1]
+    cl = closure_for_perm(r, v, r0, v0, perm)
+    R = cl.R
+    chunks = []
+    for i, j in enumerate(perm):
+        chunks.append(r[i] - R @ r0[j])
+        chunks.append(v[i] - R @ v0[j])
+    return np.concatenate(chunks).astype(float)
+
+
+@dataclass
+class ContinuationSmokeResult:
+    M_c: float
+    gate0: ChoreographyVerifyResult
+    residual0_norm: float
+    residual_mc_norm: float
+    residual_corrected_norm: float | None
+    success: bool
+    message: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "M_c": self.M_c,
+            "gate0_ok": self.gate0.ok,
+            "gate0": self.gate0.to_dict(),
+            "residual0_norm": self.residual0_norm,
+            "residual_mc_norm": self.residual_mc_norm,
+            "residual_corrected_norm": self.residual_corrected_norm,
+            "success": self.success,
+            "message": self.message,
+        }
+
+
+def pack_fairy_state(sys: System, seed: OrbitSeed) -> np.ndarray:
+    r, v = _fairy_slice(sys, seed)
+    return np.concatenate([r.ravel(), v.ravel()])
+
+
+def unpack_into_system(
+    y: np.ndarray,
+    seed: OrbitSeed,
+    M_c: float,
+    period: float,
+) -> System:
+    n = seed.n_bodies
+    r = y[: 3 * n].reshape(n, 3)
+    v = y[3 * n : 6 * n].reshape(n, 3)
+    tmp = OrbitSeed(
+        id=seed.id,
+        family=seed.family,
+        n_bodies=n,
+        G=seed.G,
+        masses=seed.masses,
+        period=period,
+        positions=r,
+        velocities=v,
+        names=seed.names,
+        symmetry=seed.symmetry,
+        source=seed.source,
+        notes=seed.notes,
+        central_index=None,
+    )
+    return attach_central_mass(tmp, M_c)
+
+
+def mass_continuation_smoke(
+    seed: OrbitSeed | None = None,
+    *,
+    M_c: float = 1e-4,
+    shift: int = 1,
+    atol_rel: float = 1e-6,
+    correct: bool = True,
+    max_nfev: int = 8,
+) -> ContinuationSmokeResult:
+    """
+    Path A smoke: gate at M_c=0, evaluate residual at small M_c, optional LS corrector.
+    """
+    if seed is None:
+        seed = load_seed(SEEDS_DIR / "free_4_square_re.json")
+
+    sys0 = attach_central_mass(seed, 0.0)
+    gate0 = verify_choreography_Tn(
+        sys0, float(seed.period), shift=shift, atol_rel=atol_rel, n_outputs=32
+    )
+    if not gate0.ok:
+        return ContinuationSmokeResult(
+            M_c=M_c,
+            gate0=gate0,
+            residual0_norm=float("inf"),
+            residual_mc_norm=float("inf"),
+            residual_corrected_norm=None,
+            success=False,
+            message="§3.2 gate failed at M_c=0",
+        )
+
+    r0 = symmetry_residual_vector(sys0, seed, seed.period, shift=shift)
+    n0 = float(np.linalg.norm(r0))
+
+    sys_m = attach_central_mass(seed, M_c)
+    r_m = symmetry_residual_vector(sys_m, seed, seed.period, shift=shift)
+    n_m = float(np.linalg.norm(r_m))
+
+    n_c: float | None = None
+    msg = "no corrector"
+    ok = gate0.ok
+
+    if correct:
+        y0 = pack_fairy_state(sys_m, seed)
+
+        def fun(y: np.ndarray) -> np.ndarray:
+            sys = unpack_into_system(y, seed, M_c, float(seed.period))
+            return symmetry_residual_vector(sys, seed, seed.period, shift=shift)
+
+        # TODO(PROMPT §2.5): diagnostic baseline = zero-order + first-order central
+        # perturbation, not bare residual0 alone.
+        try:
+            sol = least_squares(
+                fun, y0, method="lm", max_nfev=int(max_nfev), ftol=1e-8, xtol=1e-8
+            )
+            n_c = float(np.linalg.norm(sol.fun))
+            ok = gate0.ok and bool(sol.success)
+            msg = f"lm nfev={sol.nfev} cost={sol.cost:.3e}"
+        except Exception as exc:  # pragma: no cover
+            n_c = None
+            ok = False
+            msg = f"corrector failed: {exc}"
+
+    return ContinuationSmokeResult(
+        M_c=M_c,
+        gate0=gate0,
+        residual0_norm=n0,
+        residual_mc_norm=n_m,
+        residual_corrected_norm=n_c,
+        success=bool(ok),
+        message=msg,
+    )
+
+
+def correct_at_mass(
+    seed: OrbitSeed,
+    M_c: float,
+    *,
+    shift: int = 1,
+    max_nfev: int = 10,
+    period: float | None = None,
+) -> tuple[OrbitSeed, float, bool]:
+    """Newton-ish corrector at fixed M_c; returns updated fairy seed + ||F||."""
+    period = float(period if period is not None else seed.period)
+    sys_m = attach_central_mass(seed, M_c)
+    y0 = pack_fairy_state(sys_m, seed)
+
+    def fun(y: np.ndarray) -> np.ndarray:
+        sys = unpack_into_system(y, seed, M_c, period)
+        return symmetry_residual_vector(sys, seed, period, shift=shift)
+
+    sol = least_squares(fun, y0, method="lm", max_nfev=max_nfev, ftol=1e-8, xtol=1e-8)
+    sys_c = unpack_into_system(sol.x, seed, M_c, period)
+    r, v = _fairy_slice(sys_c, seed)
+    out = OrbitSeed(
+        id=seed.id,
+        family=seed.family,
+        n_bodies=seed.n_bodies,
+        G=seed.G,
+        masses=seed.masses,
+        period=period,
+        positions=r,
+        velocities=v,
+        names=seed.names,
+        symmetry=seed.symmetry,
+        source=seed.source,
+        notes=f"corrected M_c={M_c}",
+        central_index=None,
+    )
+    return out, float(np.linalg.norm(sol.fun)), bool(sol.success)
+
+
+def run_path_a_continuation(
+    seed: OrbitSeed,
+    *,
+    wall_hours: float = 8.0,
+    M_c_max: float = 1.0,
+    dM0: float = 1e-3,
+    shift: int = 1,
+    max_nfev: int = 10,
+    res_tol: float = 1e-4,
+    out_dir: Path | None = None,
+) -> dict[str, Any]:
+    """
+    Path A: raise M_c from 0 with adaptive step; each step LS-correct.
+    On failure: halve dM (fold-lite); stop at wall or M_c_max.
+    """
+    import json
+    import time
+
+    out_dir = Path(out_dir or "experiments/output/continuation_n4")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    log_path = out_dir / "steps.jsonl"
+    t_end = time.time() + float(wall_hours) * 3600.0
+
+    gate = verify_choreography_Tn(
+        attach_central_mass(seed, 0.0), float(seed.period), shift=shift, atol_rel=1e-5
+    )
+    if not gate.ok:
+        summary = {"ok": False, "reason": "gate_failed_Mc0", "gate": gate.to_dict()}
+        (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        return summary
+
+    M_c = 0.0
+    dM = float(dM0)
+    current = seed
+    steps = 0
+    with log_path.open("a", encoding="utf-8") as logf:
+        logf.write(json.dumps({"M_c": 0.0, "residual": 0.0, "ok": True, "note": "start"}) + "\n")
+        while time.time() < t_end and M_c < M_c_max - 1e-15:
+            target = min(M_c + dM, M_c_max)
+            try:
+                nxt, res_n, ok = correct_at_mass(
+                    current, target, shift=shift, max_nfev=max_nfev
+                )
+            except Exception as exc:
+                row = {"M_c": target, "error": str(exc), "dM": dM}
+                logf.write(json.dumps(row) + "\n")
+                logf.flush()
+                dM *= 0.5
+                if dM < 1e-8:
+                    break
+                continue
+            row = {
+                "M_c": target,
+                "residual": res_n,
+                "ok": ok and res_n < res_tol,
+                "dM": dM,
+                "t_left_s": max(0.0, t_end - time.time()),
+            }
+            logf.write(json.dumps(row) + "\n")
+            logf.flush()
+            steps += 1
+            if ok and res_n < res_tol:
+                M_c = target
+                current = nxt
+                save_seed(current, out_dir / f"state_Mc_{M_c:.6e}.json")
+                dM = min(dM * 1.25, 0.05)
+            else:
+                dM *= 0.5
+                if dM < 1e-8:
+                    break
+
+    summary = {
+        "path": "A",
+        "n": seed.n_bodies,
+        "M_c_final": M_c,
+        "steps": steps,
+        "wall_hours": wall_hours,
+        "out_dir": str(out_dir),
+    }
+    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    save_seed(current, out_dir / "final.json")
+    return summary
+
+
+def scale_peripheral_masses(seed: OrbitSeed, mu: float) -> OrbitSeed:
+    """Keep body 0 mass=1; set others to mu (PROMPT 5-body mass scan role)."""
+    masses = list(seed.masses)
+    if seed.n_bodies < 2:
+        raise ValueError("need n>=2")
+    masses[0] = 1.0
+    for i in range(1, seed.n_bodies):
+        masses[i] = float(mu)
+    return OrbitSeed(
+        id=seed.id,
+        family=seed.family,
+        n_bodies=seed.n_bodies,
+        G=seed.G,
+        masses=tuple(masses),
+        period=seed.period,
+        positions=seed.positions,
+        velocities=seed.velocities,
+        names=seed.names,
+        symmetry=seed.symmetry,
+        source=seed.source,
+        notes=f"mu={mu}",
+        central_index=0,
+    )
+
+
+def run_path_b_mass_scan(
+    seed: OrbitSeed,
+    *,
+    wall_hours: float = 8.0,
+    mu_min: float = 1e-3,
+    n_log_steps: int = 40,
+    shift: int = 1,
+    max_nfev: int = 10,
+    res_tol: float = 1e-4,
+    out_dir: Path | None = None,
+) -> dict[str, Any]:
+    """
+    Path B-style: fix one mass=1, sweep other masses μ in logspace downward.
+    Uses free-5 choreography seed (no separate central); body 0 is the 'center' role.
+    """
+    import json
+    import time
+
+    out_dir = Path(out_dir or "experiments/output/continuation_n5")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    log_path = out_dir / "steps.jsonl"
+    t_end = time.time() + float(wall_hours) * 3600.0
+
+    # At μ=1 equal-mass: require §3.2 gate
+    eq = scale_peripheral_masses(seed, 1.0)
+    # For free equal-mass verify, clear central_index semantics in verify
+    eq_free = OrbitSeed(
+        id=eq.id,
+        family=eq.family,
+        n_bodies=eq.n_bodies,
+        G=eq.G,
+        masses=eq.masses,
+        period=eq.period,
+        positions=eq.positions,
+        velocities=eq.velocities,
+        names=eq.names,
+        symmetry=eq.symmetry,
+        source=eq.source,
+        notes=eq.notes,
+        central_index=None,
+    )
+    gate = verify_choreography_Tn(
+        eq_free.to_system(), float(eq_free.period), shift=shift, atol_rel=1e-5
+    )
+    if not gate.ok:
+        summary = {"ok": False, "reason": "gate_failed_mu1", "gate": gate.to_dict()}
+        (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        return summary
+
+    mus = np.logspace(0.0, np.log10(mu_min), int(n_log_steps))
+    current = eq_free
+    done = 0
+    with log_path.open("a", encoding="utf-8") as logf:
+        for mu in mus:
+            if time.time() >= t_end:
+                break
+            # Residual with unequal masses: still use same geometric §3.2 on all bodies
+            # via M_c=0 attach (no extra central) + correct_at_mass with M_c=0 but
+            # scaled masses in seed.
+            scaled = OrbitSeed(
+                id=current.id,
+                family=current.family,
+                n_bodies=current.n_bodies,
+                G=current.G,
+                masses=tuple(
+                    1.0 if i == 0 else float(mu) for i in range(current.n_bodies)
+                ),
+                period=current.period,
+                positions=current.positions,
+                velocities=current.velocities,
+                names=current.names,
+                symmetry=current.symmetry,
+                source=current.source,
+                notes=f"mu={mu}",
+                central_index=None,
+            )
+            try:
+                nxt, res_n, ok = correct_at_mass(
+                    scaled, 0.0, shift=shift, max_nfev=max_nfev
+                )
+                # restore masses on corrected geometry
+                nxt = OrbitSeed(
+                    id=nxt.id,
+                    family=nxt.family,
+                    n_bodies=nxt.n_bodies,
+                    G=nxt.G,
+                    masses=scaled.masses,
+                    period=nxt.period,
+                    positions=nxt.positions,
+                    velocities=nxt.velocities,
+                    names=nxt.names,
+                    symmetry=nxt.symmetry,
+                    source=nxt.source,
+                    notes=scaled.notes,
+                    central_index=None,
+                )
+            except Exception as exc:
+                logf.write(json.dumps({"mu": float(mu), "error": str(exc)}) + "\n")
+                logf.flush()
+                break
+            row = {
+                "mu": float(mu),
+                "residual": res_n,
+                "ok": ok and res_n < res_tol,
+                "t_left_s": max(0.0, t_end - time.time()),
+            }
+            logf.write(json.dumps(row) + "\n")
+            logf.flush()
+            done += 1
+            if ok and res_n < res_tol:
+                current = nxt
+                save_seed(current, out_dir / f"state_mu_{mu:.6e}.json")
+            else:
+                # keep last good; shrink by staying but continue scan (diagnostic)
+                pass
+
+    summary = {
+        "path": "B",
+        "n": seed.n_bodies,
+        "steps": done,
+        "wall_hours": wall_hours,
+        "out_dir": str(out_dir),
+    }
+    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    save_seed(current, out_dir / "final.json")
+    return summary

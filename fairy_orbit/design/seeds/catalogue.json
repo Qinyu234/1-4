@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "description": "Equal-mass continuation seed index (Path A free_*; Path B hier_*).",
+  "seeds": [
+    {
+      "id": "free_4_square_re",
+      "family": "free_4",
+      "path": "free_4_square_re.json",
+      "n_bodies": 4,
+      "period": 6.4224343221849916,
+      "symmetry": "regular_4_gon_relative_equilibrium",
+      "path_hint": "A",
+      "orbit_class": "free_relative_equilibrium",
+      "verified_claim": "prompt_3_2_Tn_rv",
+      "perm": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "perm_label": "(1 2 3 0)",
+      "R_axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "R_angle": 0.0,
+      "E_r_rel": 1.6704373337185315e-32,
+      "E_v_rel": 7.787839530335014e-32,
+      "tau": 1.6056085805462479,
+      "choreography_ok": true
+    },
+    {
+      "id": "free_5_pentagon_re",
+      "family": "free_5",
+      "path": "free_5_pentagon_re.json",
+      "n_bodies": 5,
+      "period": 5.355627818278749,
+      "symmetry": "regular_5_gon_relative_equilibrium",
+      "path_hint": "A",
+      "orbit_class": "free_relative_equilibrium",
+      "verified_claim": "prompt_3_2_Tn_rv",
+      "perm": [
+        1,
+        2,
+        3,
+        4,
+        0
+      ],
+      "perm_label": "(1 2 3 4 0)",
+      "R_axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "R_angle": 0.0,
+      "E_r_rel": 8.926288731845105e-32,
+      "E_v_rel": 1.2152481545738224e-31,
+      "tau": 1.0711255636557497,
+      "choreography_ok": true
+    },
+    {
+      "id": "hier_1plus4_manifold",
+      "family": "hier_1plus4",
+      "path": "hier_1plus4_manifold.json",
+      "n_bodies": 5,
+      "period": 6.283185307179586,
+      "symmetry": "Td_rays_linear_poly",
+      "path_hint": "B",
+      "orbit_class": "hier_baseline_ic",
+      "verified_claim": "none_periodic_not_claimed"
+    }
+  ]
+}

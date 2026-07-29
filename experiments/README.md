@@ -1,45 +1,38 @@
 # Experiments
 
-## Active (PEO mainline)
+**Design log:** repo-root `PROMPT.md` (overrides other docs).
 
-**Invariant:** Stage-A base error (`run_rep_error_scan` → `sigmas.json`) **before** any detailed σ-weighted score. Campaign / beam / heatmap / Bayes / staged CLIs hard-fail if `sigmas.json` is missing or uncalibrated.
+## Active (PROMPT mainline)
 
 | Script | Role |
 |--------|------|
-| `run_staged_peo.py` | **ABCD→BCDA reachability:** 一阶 coarse → 二阶 expand grid → 三阶 stain+unlock → 细致 score |
-| `run_bayes_peo.py` | Optional TPE helper (also requires σ; stagnate → expand+unlock) |
-| `run_long_campaign.py` | Beam search until solve / plateau / wall (edge expand) |
-| `run_me_heatmap.py` | Progressive `(m,e)` heatmap cells |
-| `run_10h_campaign.py` | Orchestrator: σ → heatmap → beam → plots |
-| `run_beam_search.py` | One-shot multi-seed beam |
-| `run_rep_error_scan.py` | Stage-A σ calibration (base error) |
-| `fit_rep_sigmas.py` | Fit `sigmas.json` from scan |
-| `plot_campaign_orbits.py` | Re-integrate + plot campaign bests |
-| `run_peo_smoke.py` | Short PEO smoke |
-
-Typical run:
+| `verify_orbit_seeds.py` | §3.2 gate: \(x_i(T/n)=R\,x_{P(i)}(0)\) for **r and v**; update catalogue |
+| `run_mass_continuation_smoke.py` | Path A stub: \(M_c=0\) gate → tiny \(M_c\) + LS corrector |
+| `run_choreography_search.py` | Free-N multi-start §3.2 polish (`--n 4|5 --wall-hours`) |
+| `run_mass_continuation_campaign.py` | Path A \(M_c\uparrow\) (n=4) / μ↓ (n=5) |
+| `run_prompt_8h.py` | Launch all four campaigns |
 
 ```powershell
-# 1) base error first
-.\.venv\Scripts\python.exe experiments\run_rep_error_scan.py
-# 2) staged ABCD→BCDA hunt
-.\.venv\Scripts\python.exe experiments\run_staged_peo.py --out experiments\output\staged_peo
-# smoke:
-.\.venv\Scripts\python.exe experiments\run_staged_peo.py --smoke
+# four parallel 8h campaigns (or start each manually):
+.\.venv\Scripts\python.exe experiments\run_choreography_search.py --n 4 --wall-hours 8
+.\.venv\Scripts\python.exe experiments\run_choreography_search.py --n 5 --wall-hours 8
+.\.venv\Scripts\python.exe experiments\run_mass_continuation_campaign.py --n 4 --wall-hours 8
+.\.venv\Scripts\python.exe experiments\run_mass_continuation_campaign.py --n 5 --wall-hours 8
 ```
 
-Outputs: `experiments/output/staged_peo/`, `experiments/output/campaign_10h/`, `experiments/output/rep_error/`.
+Docs: `docs/continuation/`. Outputs:
+`experiments/output/choreography_search_n{4,5}/`,
+`experiments/output/continuation_n{4,5}/`,
+`experiments/output/prompt_8h_logs/`.
 
 ## Legacy (`experiments/legacy/`)
 
-Td μ_eff / calibration / old stereo & perf probes. Kept for reference; not on the PEO search path.
+Demoted Bayes / staged / campaign / σ-scan / Td probes. Not on the mainline.
 
-| Script | Notes |
-|--------|-------|
-| `run_td_*`, `fit_td_growth_law.py` | Td symmetry / β–e scans |
-| `run_tetra_error_growth.py` | Integrator error growth |
-| `run_calibration.py` | Old calibration IC |
-| `run_stereo_from_seed.py` | Seed stereo probe |
-| `run_search_perf.py` | Eval timing probe |
+| Group | Scripts |
+|-------|---------|
+| Bayes / staged / campaign | `run_bayes_peo.py`, `run_staged_peo.py`, `run_long_campaign.py`, `run_10h_campaign.py`, `run_beam_search.py`, `run_me_heatmap.py`, `run_peo_smoke.py`, `plot_campaign_orbits.py` |
+| σ Stage-A (old score hunt) | `run_rep_error_scan.py`, `fit_rep_sigmas.py` |
+| Td / calibration | `run_td_*`, `fit_td_growth_law.py`, `run_tetra_error_growth.py`, `run_calibration.py`, … |
 
-Launcher for legacy modes: `scripts/run_campaign.py` (Td modes only).
+Launcher for old Td modes: `scripts/run_campaign.py`.

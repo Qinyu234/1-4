@@ -89,10 +89,13 @@ Drift of \((E_r(t),E_v(t))\) is the error time series (`observe.closure`).
 | `fairy_orbit.observe.closure` | Kabsch, E_r, E_v, radial S(t) |
 | `fairy_orbit.observe.peo` | Filter: escape → choreography → closure |
 | `fairy_orbit.observe.error_base` | Exp normalize of E_r/E_v |
-| `experiments/run_peo_smoke.py` | Smoke E_r(t)/E_v(t) |
-| `experiments/run_calibration.py` | ε_numerical (legacy) |
-| `experiments/run_td_*` | Prior Td error campaigns (kept) |
-| `scripts/run_campaign.py` | calib / peo / td_* |
+| `experiments/verify_orbit_seeds.py` | PROMPT §3.2 seed gate |
+| `experiments/run_mass_continuation_smoke.py` | Path A continuation stub |
+| `experiments/legacy/run_*` | Demoted Bayes/campaign/Td (not mainline) |
+| `fairy_orbit.design.seeds` | Equal-mass / hierarchical continuation seed catalogue |
+| `docs/continuation/` | Path A (\(m_c\) from 0) / Path B (\(m_c=1\)) specs |
+| `experiments/verify_orbit_seeds.py` | REBOUND one-period seed acceptance |
+| `experiments/notes/bayes_full_wide_negative.md` | Bayes 2000-trial negative result |
 
 ---
 
@@ -102,3 +105,25 @@ Drift of \((E_r(t),E_v(t))\) is the error time series (`observe.closure`).
 
 **PEO (PROMPT):** \(\Phi_T(X_0)\approx(R,P)X_0\) after escape + radial
 choreography filters — archive then refine.
+
+---
+
+## 6. Negative result: Bayesian / GP search (2026-07-28)
+
+Wide full-parameter Optuna TPE (`experiments/output/bayes_full_wide/`, 2000 trials)
+reached **success=0** (best ≈ choreography soft floor). This is treated as a
+**method mismatch**, not undersampling:
+
+- Resonance / radial-choreography residuals live on **fractal / separatrix-sensitive**
+  landscapes; nearby parameters can jump between escape, identity-at-T, and near-miss.
+- Bayesian optimization assumes a **smooth** surrogate (GP / TPE clustering). That
+  assumption does not hold on such landscapes.
+
+**Demote:** free-parameter Bayes / staged soft-residual BO as mainline PEO hunt.  
+**Promote:** PROMPT mainline — equal-mass choreography → **mass continuation + Newton**
+(pseudo-arclength on folds). Layers mirrored in
+[`docs/continuation/PHASES.md`](continuation/PHASES.md).  
+**On conflict, [`PROMPT.md`](../PROMPT.md) covers all other docs.**
+
+Construct sources / Fourier+action: PROMPT §3.1 and
+[`docs/continuation/LITERATURE_SEEDS.md`](continuation/LITERATURE_SEEDS.md).
