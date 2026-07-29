@@ -6,8 +6,19 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# Experiment data & artifacts
+experiments/output/
 orbit_library/*.json
 !orbit_library/.gitkeep
-experiments/output/
 *.png
+*.npy
+*.npzz
+*.h5
+*.hdf5
+*.sqlite
+*.db
+*.jsonl
+*.log
+
 .DS_Store
