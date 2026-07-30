@@ -227,6 +227,14 @@ def export_html_viewer(
         ],
         "sliders": [
             {
+                "active": 0,
+                "currentvalue": {
+                    "prefix": "t = ",
+                    "suffix": "",
+                    "xanchor": "right",
+                    "font": {"size": 14},
+                },
+                "pad": {"t": 50, "b": 10},
                 "steps": [
                     {
                         "method": "animate",
@@ -235,14 +243,15 @@ def export_html_viewer(
                             {
                                 "mode": "immediate",
                                 "frame": {"duration": 0, "redraw": True},
+                                "transition": {"duration": 0},
                             },
                         ],
-                        "label": f"{times[i]:.1f}",
+                        "label": f"{times[i]:.3g}",
                     }
-                    for i in range(0, len(times), max(1, len(times) // 20))
+                    for i in range(len(times))
                 ],
-                "x": 0.1,
-                "len": 0.8,
+                "x": 0.08,
+                "len": 0.84,
             }
         ],
     }

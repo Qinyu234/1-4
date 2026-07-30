@@ -11,6 +11,7 @@
 | `query_search_db.py` | Query search DB summary / passes |
 | `run_mass_continuation_campaign.py` | Path A \(M_c\uparrow\) (n=4) / μ↓ (n=5); requires `--seed` |
 | `run_prompt_campaign.py` | Self-expanding parallel launcher (default unlimited; optional `--wall-hours`) |
+| `run_auto_pipeline.py` | Auto: ensure searches + periodic shape-family replot |
 | `plot_best_orbits.py` | Plot `best.json` / `final.json` orbits |
 
 ```powershell
@@ -23,8 +24,15 @@
 # Wipe SQLite + output dirs then relaunch
 .\.venv\Scripts\python.exe experiments\run_prompt_campaign.py --fresh
 
+# Auto pipeline: search (resume) + replot shape families every 30 min
+.\.venv\Scripts\python.exe experiments\run_auto_pipeline.py --plot-every-min 30
+
 .\.venv\Scripts\python.exe experiments\query_search_db.py --n 4 --passes
 .\.venv\Scripts\python.exe experiments\plot_best_orbits.py
+# HTML 时间滑条动画：experiments/output/best_orbit_plots/choreo_n*_best/orbit_anim.html
+# 形状差异族（非仅 residual 最优）：
+.\.venv\Scripts\python.exe experiments\plot_shape_families.py --n-families 6
+# → best_orbit_plots/choreo_n{4,5}_families/family_*/orbit_anim.html
 ```
 
 `--wall-hours <=0` means unlimited. Each run **continues** from `search.sqlite`
