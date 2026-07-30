@@ -222,8 +222,21 @@ class SearchTrial:
     reason: str
 
 
-def _import_existing_passes(store: ChoreographySearchStore, out_dir: Path, n: int) -> int:
-    """Pull existing pass_*.json / best.json into SQLite once."""
+def _import_existing_passes(
+    store: ChoreographySearchStore,
+    out_dir: Path,
+    n: int,
+    *,
+    force: bool = False,
+) -> int:
+    """
+    One-shot migration: pull pass_*.json / best.json into SQLite.
+
+    Skipped when the DB already has trials (SQLite is the source of truth).
+    Pass ``force=True`` to scan JSON even then (idempotent via fingerprints).
+    """
+    if not force and (store.count_passed(n) > 0 or store.count_trials(n) > 0):
+        return 0
     imported = 0
     for path in sorted(out_dir.glob(f"pass_{n}_*.json")):
         try:
@@ -248,6 +261,28 @@ def _import_existing_passes(store: ChoreographySearchStore, out_dir: Path, n: in
         except Exception:
             pass
     return imported
+
+
+def archive_pass_json_files(out_dir: Path, n: int) -> int:
+    """
+    Move legacy ``pass_*.json`` into ``pass_json_archive/`` (SQLite keeps seeds).
+
+    Returns number of files moved. ``best.json`` is left in place.
+    """
+    out_dir = Path(out_dir)
+    archive = out_dir / "pass_json_archive"
+    moved = 0
+    paths = list(out_dir.glob(f"pass_{n}_*.json"))
+    if not paths:
+        return 0
+    archive.mkdir(parents=True, exist_ok=True)
+    for path in paths:
+        dest = archive / path.name
+        if dest.exists():
+            dest = archive / f"{path.stem}_{int(time.time())}{path.suffix}"
+        path.rename(dest)
+        moved += 1
+    return moved
 
 
 def _write_summary(
@@ -280,6 +315,9 @@ def run_choreography_search(
     fresh: bool = False,
     atol_rel: float = 1e-8,
     max_residual: float = 1e-6,
+    write_pass_json: bool = False,
+    import_json: bool = False,
+    archive_json: bool = True,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """
@@ -287,6 +325,9 @@ def run_choreography_search(
 
     Accept only if §3.2 ``atol_rel`` holds, polish residual ``<= max_residual``,
     and the orbit does not maintain a regular n-gon. Resumes from SQLite.
+
+    Accepted seeds are stored in SQLite (``seed_json``). Per-pass ``pass_*.json``
+    files are off by default; only ``best.json`` is refreshed on disk.
     """
     out_dir = Path(out_dir or f"experiments/output/choreography_search_n{n}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -306,9 +347,9 @@ def run_choreography_search(
             store.clear(n)
 
         demoted = store.refilter_by_residual(n, max_residual=max_residual)
-        imported = _import_existing_passes(store, out_dir, n)
-        # demote again after import of loose pass JSON
+        imported = _import_existing_passes(store, out_dir, n, force=import_json)
         demoted += store.refilter_by_residual(n, max_residual=max_residual)
+        archived = archive_pass_json_files(out_dir, n) if archive_json else 0
         trial_no = store.next_trial_no(n)
         best_rec = store.best_accepted(n)
         best_res = float("inf") if best_rec is None or best_rec.residual is None else float(
@@ -321,8 +362,9 @@ def run_choreography_search(
         print(
             f"[search n={n}] db={db_path} resume_trial={trial_no} "
             f"stored={store.count_trials(n)} passed={store.count_passed(n)} "
-            f"imported={imported} demoted={demoted} "
-            f"atol_rel={atol_rel:g} max_residual={max_residual:g}",
+            f"imported={imported} demoted={demoted} archived_json={archived} "
+            f"atol_rel={atol_rel:g} max_residual={max_residual:g} "
+            f"write_pass_json={write_pass_json}",
             flush=True,
         )
 
@@ -344,8 +386,8 @@ def run_choreography_search(
                         polished.period,
                         shift=shift,
                         atol_rel=atol_rel,
-                        n_outputs=24,
-                        ngon_samples=12,
+                        n_outputs=16,
+                        ngon_samples=8,
                     )
                     ok = bool(acc.ok)
                     reason = acc.reason
@@ -363,7 +405,6 @@ def run_choreography_search(
                         gate_pass = False
                     elif ok:
                         gate_pass = True
-                        path = str(out_dir / f"pass_{n}_{trial_no:05d}.json")
                         save_seed_obj = OrbitSeed(
                             id=f"search_n{n}_{trial_no:05d}",
                             family=polished.family,
@@ -380,7 +421,9 @@ def run_choreography_search(
                             central_index=None,
                             verification=acc.to_dict(),
                         )
-                        save_seed(save_seed_obj, Path(path))
+                        if write_pass_json:
+                            path = str(out_dir / f"pass_{n}_{trial_no:05d}.json")
+                            save_seed(save_seed_obj, Path(path))
                         if res_n < best_res:
                             best_res = res_n
                             save_seed(save_seed_obj, out_dir / "best.json")

@@ -36,8 +36,10 @@
 ```
 
 `--wall-hours <=0` means unlimited. Each run **continues** from `search.sqlite`
-(no re-do of stored `start_fp` / accepted `result_fp`). `trials.jsonl` still
-appends for human logs; `summary.json` updates live.
+(no re-do of stored `start_fp` / accepted `result_fp`). Accepted seeds live in
+SQLite (`seed_json`); per-pass `pass_*.json` are **not** written by default
+(legacy files are moved to `pass_json_archive/` on startup). Only `best.json`
+plus `trials.jsonl` / `summary.json` stay as light sidecars.
 
 Kept outputs: `choreography_search_n{4,5}/`, `continuation_n{4,5}/`,
 `prompt_campaign_logs/`, `best_orbit_plots/`.

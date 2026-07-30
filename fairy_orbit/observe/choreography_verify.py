@@ -295,6 +295,9 @@ def accept_free_choreography(
     Rigid rotating square/pentagon relative equilibria (roles A=B=C=…) are
     rejected. An IC that looks polygonal for one snapshot is not rejected
     unless the shape stays regular along the period.
+
+    Maintained-ngon check runs only after §3.2 passes (avoids a full-period
+    integrate on the common fail path).
     """
     gate = verify_choreography_Tn(
         system,
@@ -303,19 +306,19 @@ def accept_free_choreography(
         atol_rel=atol_rel,
         n_outputs=n_outputs,
     )
+    if not gate.ok:
+        return OrbitAcceptResult(
+            ok=False,
+            reason="failed_prompt_3_2",
+            choreography=gate,
+            maintains_regular_ngon=False,
+        )
     maintained = maintains_regular_equal_ngon(
         system,
         period,
         rtol=ngon_rtol,
         n_samples=ngon_samples,
     )
-    if not gate.ok:
-        return OrbitAcceptResult(
-            ok=False,
-            reason="failed_prompt_3_2",
-            choreography=gate,
-            maintains_regular_ngon=maintained,
-        )
     if maintained:
         return OrbitAcceptResult(
             ok=False,

@@ -46,6 +46,21 @@ def main() -> None:
         default=1e-6,
         help="max polish residual to count as pass (default 1e-6)",
     )
+    p.add_argument(
+        "--write-pass-json",
+        action="store_true",
+        help="also write pass_*.json (default: SQLite + best.json only)",
+    )
+    p.add_argument(
+        "--import-json",
+        action="store_true",
+        help="force scan pass_*.json into SQLite even if DB already has rows",
+    )
+    p.add_argument(
+        "--keep-pass-json",
+        action="store_true",
+        help="do not move existing pass_*.json into pass_json_archive/",
+    )
     args = p.parse_args()
     out = args.out or (ROOT / "experiments" / "output" / f"choreography_search_n{args.n}")
     wall = None if args.wall_hours <= 0 else args.wall_hours
@@ -71,6 +86,9 @@ def main() -> None:
         fresh=args.fresh,
         atol_rel=args.atol_rel,
         max_residual=args.max_residual,
+        write_pass_json=args.write_pass_json,
+        import_json=args.import_json,
+        archive_json=not args.keep_pass_json,
         on_progress=prog,
     )
     print("DONE", summary, flush=True)
