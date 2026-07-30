@@ -278,19 +278,22 @@ def run_choreography_search(
     db_path: Path | None = None,
     max_nfev: int = 14,
     fresh: bool = False,
+    atol_rel: float = 1e-8,
+    max_residual: float = 1e-6,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """
     Long-running multi-start §3.2 polish for free equal-mass N-body.
 
-    Resumes from SQLite: continues ``trial_no`` after max stored, skips
-    duplicate start fingerprints, and does not re-save accepted result
-    fingerprints. ``wall_hours=None`` / ``<=0`` means unlimited.
+    Accept only if §3.2 ``atol_rel`` holds, polish residual ``<= max_residual``,
+    and the orbit does not maintain a regular n-gon. Resumes from SQLite.
     """
     out_dir = Path(out_dir or f"experiments/output/choreography_search_n{n}")
     out_dir.mkdir(parents=True, exist_ok=True)
     db_path = Path(db_path or (out_dir / DEFAULT_SEARCH_DB_NAME))
     log_path = out_dir / "trials.jsonl"
+    atol_rel = float(atol_rel)
+    max_residual = float(max_residual)
 
     t_end = (
         None
@@ -302,7 +305,10 @@ def run_choreography_search(
         if fresh:
             store.clear(n)
 
+        demoted = store.refilter_by_residual(n, max_residual=max_residual)
         imported = _import_existing_passes(store, out_dir, n)
+        # demote again after import of loose pass JSON
+        demoted += store.refilter_by_residual(n, max_residual=max_residual)
         trial_no = store.next_trial_no(n)
         best_rec = store.best_accepted(n)
         best_res = float("inf") if best_rec is None or best_rec.residual is None else float(
@@ -315,7 +321,8 @@ def run_choreography_search(
         print(
             f"[search n={n}] db={db_path} resume_trial={trial_no} "
             f"stored={store.count_trials(n)} passed={store.count_passed(n)} "
-            f"imported={imported}",
+            f"imported={imported} demoted={demoted} "
+            f"atol_rel={atol_rel:g} max_residual={max_residual:g}",
             flush=True,
         )
 
@@ -336,15 +343,18 @@ def run_choreography_search(
                         polished.to_system(),
                         polished.period,
                         shift=shift,
-                        atol_rel=1e-5,
+                        atol_rel=atol_rel,
                         n_outputs=24,
                         ngon_samples=12,
                     )
                     ok = bool(acc.ok)
+                    reason = acc.reason
+                    if ok and res_n > max_residual:
+                        ok = False
+                        reason = "failed_residual_too_large"
                     result_fp = seed_fingerprint(polished)
                     path = None
                     duplicate_result = ok and store.has_accepted_result_fp(n, result_fp)
-                    reason = acc.reason
                     save_seed_obj: OrbitSeed | None = None
 
                     if ok and duplicate_result:
@@ -390,7 +400,6 @@ def run_choreography_search(
                         seed=save_seed_obj,
                     )
                     if row_id is None:
-                        # race / unique start: already stored
                         skipped_dupes += 1
                         trial_no += 1
                         continue
@@ -406,19 +415,26 @@ def run_choreography_search(
                         "start_fp": start_fp,
                         "result_fp": result_fp,
                         "duplicate_result": duplicate_result,
+                        "atol_rel": atol_rel,
+                        "max_residual": max_residual,
                         "t_left_s": None if t_end is None else max(0.0, t_end - time.time()),
                     }
                     logf.write(json.dumps(row) + "\n")
                     logf.flush()
                     if on_progress:
                         on_progress(row)
-                    _write_summary(
+                    summary = _write_summary(
                         store,
                         n,
                         out_dir,
                         wall_hours=wall_hours,
                         status="running",
                         skipped_dupes=skipped_dupes,
+                    )
+                    summary["atol_rel"] = atol_rel
+                    summary["max_residual"] = max_residual
+                    (out_dir / "summary.json").write_text(
+                        json.dumps(summary, indent=2), encoding="utf-8"
                     )
                 except Exception as exc:  # pragma: no cover
                     store.insert_trial(
@@ -444,7 +460,7 @@ def run_choreography_search(
 
                 trial_no += 1
 
-        return _write_summary(
+        summary = _write_summary(
             store,
             n,
             out_dir,
@@ -452,3 +468,7 @@ def run_choreography_search(
             status="done",
             skipped_dupes=skipped_dupes,
         )
+        summary["atol_rel"] = atol_rel
+        summary["max_residual"] = max_residual
+        (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        return summary

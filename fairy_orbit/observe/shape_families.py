@@ -93,6 +93,7 @@ def select_diverse_families(
     n_families: int = 6,
     pool_limit: int | None = None,
     min_sep: float = 0.12,
+    max_residual: float | None = 1e-6,
 ) -> list[ShapeFamilyPick]:
     """
     Greedy max-min diversity over accepted passes.
@@ -101,7 +102,11 @@ def select_diverse_families(
     maximizes distance to the nearest already-selected family (subject to
     ``min_sep`` when possible).
     """
-    records = store.list_passes(n_bodies, limit=pool_limit or 10_000)
+    records = store.list_passes(
+        n_bodies,
+        limit=pool_limit or 10_000,
+        max_residual=max_residual,
+    )
     cands: list[tuple[TrialRecord, OrbitSeed, np.ndarray, float]] = []
     for rec in records:
         if rec.seed_json is None or rec.residual is None:

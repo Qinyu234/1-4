@@ -66,11 +66,33 @@ def test_shape_feature_differs_for_distinct_geometries():
     assert shape_distance(a, c) > 0.05
 
 
+def test_refilter_by_residual(tmp_path: Path):
+    db = tmp_path / "refilter.sqlite"
+    with ChoreographySearchStore(db) as store:
+        for i, res in enumerate([1e-9, 1e-4, 1e-8], start=1):
+            seed = _seed_circle(4, 1.0 + 0.01 * i)
+            store.insert_trial(
+                n_bodies=4,
+                trial_no=i,
+                start_fp=f"s{i}",
+                result_fp=f"r{i}",
+                residual=res,
+                period=seed.period,
+                ok_gate=True,
+                reason="ok",
+                maintains_regular_ngon=False,
+                seed=seed,
+            )
+        n = store.refilter_by_residual(4, max_residual=1e-6)
+        assert n == 1
+        assert store.count_passed(4) == 2
+
+
 def test_select_diverse_families(tmp_path: Path):
-    db = tmp_path / "s.sqlite"
+    db = tmp_path / "div.sqlite"
     seeds = [
         (_seed_circle(4, 1.0, 0.0), 1e-8),
-        (_seed_circle(4, 1.0, 0.05), 2e-8),  # near-duplicate shape
+        (_seed_circle(4, 1.0, 0.05), 2e-8),
         (_seed_line(4), 3e-8),
         (_seed_circle(4, 1.0, 1.2), 4e-8),
     ]
@@ -90,7 +112,6 @@ def test_select_diverse_families(tmp_path: Path):
             )
         picks = select_diverse_families(store, 4, n_families=3, min_sep=0.05)
         assert len(picks) >= 2
-        assert picks[0].residual <= picks[1].residual or True  # first is best
         assert picks[0].record.trial_no == 1
         ids = {p.seed.id for p in picks}
         assert "line4" in ids or any("line" in i for i in ids)

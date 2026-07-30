@@ -51,16 +51,17 @@ def _running_search_pids() -> list[tuple[int, str]]:
     return out
 
 
-def ensure_searches(*, wall_hours: float, fresh: bool) -> list[subprocess.Popen]:
+def ensure_searches(
+    *,
+    wall_hours: float,
+    fresh: bool,
+    atol_rel: float = 1e-8,
+    max_residual: float = 1e-6,
+) -> list[subprocess.Popen]:
     """Start missing N=4 / N=5 search workers; return newly spawned procs."""
     running = _running_search_pids()
     have = set()
     for _pid, cmd in running:
-        if "--n 4" in cmd or "--n  4" in cmd or " --n 4 " in f" {cmd} ":
-            have.add(4)
-        if "--n 5" in cmd or " --n 5 " in f" {cmd} ":
-            have.add(5)
-        # argparse style: --n\n4 sometimes as --n 4
         if "--n" in cmd:
             parts = cmd.replace("=", " ").split()
             for i, p in enumerate(parts):
@@ -84,6 +85,10 @@ def ensure_searches(*, wall_hours: float, fresh: bool) -> list[subprocess.Popen]
             str(n),
             "--wall-hours",
             str(wall_hours),
+            "--atol-rel",
+            str(atol_rel),
+            "--max-residual",
+            str(max_residual),
         ]
         if fresh:
             cmd.append("--fresh")
@@ -103,7 +108,14 @@ def ensure_searches(*, wall_hours: float, fresh: bool) -> list[subprocess.Popen]
     return spawned
 
 
-def run_family_plots(*, n_families: int, min_sep: float, periods: float, max_frames: int) -> None:
+def run_family_plots(
+    *,
+    n_families: int,
+    min_sep: float,
+    periods: float,
+    max_frames: int,
+    max_residual: float,
+) -> None:
     cmd = [
         _py(),
         str(ROOT / "experiments" / "plot_shape_families.py"),
@@ -118,6 +130,8 @@ def run_family_plots(*, n_families: int, min_sep: float, periods: float, max_fra
         str(periods),
         "--max-frames",
         str(max_frames),
+        "--max-residual",
+        str(max_residual),
     ]
     print("+", " ".join(cmd), flush=True)
     code = subprocess.call(cmd, cwd=str(ROOT))
@@ -148,6 +162,8 @@ def main() -> None:
     p.add_argument("--min-sep", type=float, default=0.15)
     p.add_argument("--periods", type=float, default=1.0)
     p.add_argument("--max-frames", type=int, default=140)
+    p.add_argument("--atol-rel", type=float, default=1e-8)
+    p.add_argument("--max-residual", type=float, default=1e-6)
     p.add_argument("--fresh", action="store_true", help="clear search DB before launch")
     p.add_argument(
         "--plot-once",
@@ -162,7 +178,12 @@ def main() -> None:
     args = p.parse_args()
 
     status_path = ROOT / "experiments" / "output" / "pipeline_status.json"
-    spawned = ensure_searches(wall_hours=args.wall_hours, fresh=args.fresh)
+    spawned = ensure_searches(
+        wall_hours=args.wall_hours,
+        fresh=args.fresh,
+        atol_rel=args.atol_rel,
+        max_residual=args.max_residual,
+    )
 
     if not args.no_plot:
         print("initial shape-family plot…", flush=True)
@@ -171,6 +192,7 @@ def main() -> None:
             min_sep=args.min_sep,
             periods=args.periods,
             max_frames=args.max_frames,
+            max_residual=args.max_residual,
         )
 
     write_status(
@@ -203,12 +225,18 @@ def main() -> None:
             tick += 1
             print(f"--- plot tick {tick} ---", flush=True)
             # relaunch searches if they died
-            ensure_searches(wall_hours=args.wall_hours, fresh=False)
+            ensure_searches(
+                wall_hours=args.wall_hours,
+                fresh=False,
+                atol_rel=args.atol_rel,
+                max_residual=args.max_residual,
+            )
             run_family_plots(
                 n_families=args.n_families,
                 min_sep=args.min_sep,
                 periods=args.periods,
                 max_frames=args.max_frames,
+                max_residual=args.max_residual,
             )
             write_status(
                 status_path,

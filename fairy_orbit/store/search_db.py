@@ -292,17 +292,62 @@ class ChoreographySearchStore:
             seed=seed,
         )
 
-    def list_passes(self, n_bodies: int, *, limit: int = 50) -> list[TrialRecord]:
+    def list_passes(
+        self,
+        n_bodies: int,
+        *,
+        limit: int = 50,
+        max_residual: float | None = None,
+    ) -> list[TrialRecord]:
+        if max_residual is None:
+            cur = self._conn.execute(
+                """
+                SELECT * FROM trials
+                WHERE n_bodies=? AND ok_gate=1
+                ORDER BY residual ASC
+                LIMIT ?
+                """,
+                (int(n_bodies), int(limit)),
+            )
+        else:
+            cur = self._conn.execute(
+                """
+                SELECT * FROM trials
+                WHERE n_bodies=? AND ok_gate=1 AND residual IS NOT NULL
+                      AND residual <= ?
+                ORDER BY residual ASC
+                LIMIT ?
+                """,
+                (int(n_bodies), float(max_residual), int(limit)),
+            )
+        return [self._row_to_record(r) for r in cur.fetchall()]
+
+    def refilter_by_residual(
+        self,
+        n_bodies: int,
+        *,
+        max_residual: float,
+    ) -> int:
+        """
+        Demote accepted trials whose polish residual exceeds ``max_residual``.
+
+        Returns number of rows demoted. History is kept (ok_gate → 0).
+        """
         cur = self._conn.execute(
             """
-            SELECT * FROM trials
+            UPDATE trials
+            SET ok_gate=0,
+                reason=CASE
+                    WHEN reason='' OR reason='ok' THEN 'demoted_residual'
+                    ELSE reason || ';demoted_residual'
+                END
             WHERE n_bodies=? AND ok_gate=1
-            ORDER BY residual ASC
-            LIMIT ?
+              AND (residual IS NULL OR residual > ?)
             """,
-            (int(n_bodies), int(limit)),
+            (int(n_bodies), float(max_residual)),
         )
-        return [self._row_to_record(r) for r in cur.fetchall()]
+        self._conn.commit()
+        return int(cur.rowcount)
 
     def summary_dict(self, n_bodies: int, *, out_dir: str | None = None) -> dict[str, Any]:
         best = self.best_accepted(n_bodies)

@@ -34,12 +34,24 @@ def main() -> None:
         action="store_true",
         help="clear SQLite trials for this N before starting",
     )
+    p.add_argument(
+        "--atol-rel",
+        type=float,
+        default=1e-8,
+        help="§3.2 relative residual gate (default 1e-8)",
+    )
+    p.add_argument(
+        "--max-residual",
+        type=float,
+        default=1e-6,
+        help="max polish residual to count as pass (default 1e-6)",
+    )
     args = p.parse_args()
     out = args.out or (ROOT / "experiments" / "output" / f"choreography_search_n{args.n}")
     wall = None if args.wall_hours <= 0 else args.wall_hours
     print(
         f"choreography search n={args.n} wall={'unlimited' if wall is None else f'{wall}h'} "
-        f"fresh={args.fresh} → {out}",
+        f"fresh={args.fresh} atol_rel={args.atol_rel:g} max_residual={args.max_residual:g} → {out}",
         flush=True,
     )
 
@@ -57,6 +69,8 @@ def main() -> None:
         out_dir=out,
         db_path=args.db,
         fresh=args.fresh,
+        atol_rel=args.atol_rel,
+        max_residual=args.max_residual,
         on_progress=prog,
     )
     print("DONE", summary, flush=True)

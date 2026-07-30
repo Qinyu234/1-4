@@ -88,6 +88,7 @@ def plot_diverse_for_n(
     periods: float,
     animate: bool,
     max_frames: int,
+    max_residual: float,
 ) -> None:
     db = OUT / f"choreography_search_n{n}" / DEFAULT_SEARCH_DB_NAME
     if not db.exists():
@@ -95,7 +96,7 @@ def plot_diverse_for_n(
         return
     with ChoreographySearchStore(db) as store:
         picks = select_diverse_families(
-            store, n, n_families=n_families, min_sep=min_sep
+            store, n, n_families=n_families, min_sep=min_sep, max_residual=max_residual
         )
         catalogue = families_to_dict(picks)
         catalogue["n"] = n
@@ -105,7 +106,8 @@ def plot_diverse_for_n(
             json.dumps(catalogue, indent=2), encoding="utf-8"
         )
         print(
-            f"n={n}: selected {len(picks)} families from {store.count_passed(n)} passes",
+            f"n={n}: selected {len(picks)} families "
+            f"(pool residual<={max_residual:g}; ok_gate={store.count_passed(n)})",
             flush=True,
         )
         for p in picks:
@@ -145,6 +147,12 @@ def main() -> None:
     )
     p.add_argument("--periods", type=float, default=1.0)
     p.add_argument("--max-frames", type=int, default=160)
+    p.add_argument(
+        "--max-residual",
+        type=float,
+        default=1e-6,
+        help="only use passes with polish residual <= this",
+    )
     p.add_argument("--no-anim", action="store_true")
     p.add_argument("--out", type=Path, default=OUT / "best_orbit_plots")
     args = p.parse_args()
@@ -158,6 +166,7 @@ def main() -> None:
             periods=args.periods,
             animate=not args.no_anim,
             max_frames=args.max_frames,
+            max_residual=args.max_residual,
         )
 
 
