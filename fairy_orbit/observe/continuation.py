@@ -76,16 +76,31 @@ def symmetry_residual_vector(
     *,
     shift: int = 1,
     n_outputs: int = 16,
+    optics_soft: bool = True,
+    log_rho: float = 0.0,
+    d_target: float | None = None,
+    w_gravity: float = 1.0,
+    w_optics: float = 1.0,
+    encounter_factor: float = 3.0,
 ) -> np.ndarray:
     """
     Flattened residual of §3.2 on the fairy subset after integrating τ=T/n.
 
     F = stack_i ( r_i(τ) - R r_{P(i)}(0),  v_i(τ) - R v_{P(i)}(0) ).
+
+    When a central body is present and ``optics_soft``, also append soft
+    extras: gravity close-approach attract + encounter-conditioned
+    ``|Δr_perp|`` optical deficit (equal-density ``log_rho``).
     """
+    from fairy_orbit.observe.optical_encounter import DEFAULT_LOG_RHO
+
+    lr = float(log_rho) if log_rho is not None else DEFAULT_LOG_RHO
+
     n = seed.n_bodies
     tau = float(period) / n
     perm = cyclic_role_perm(n, shift=shift)
     r0, v0 = _fairy_slice(sys, seed)
+    has_central = len(sys.bodies) > n
     cfg = ReboundConfig(
         stop_on_escape=False,
         stop_on_collision=False,
@@ -95,21 +110,100 @@ def symmetry_residual_vector(
         dt=2e-3,
         min_dt=1e-5,
     )
-    traj = integrate(sys, t_end=tau, n_outputs=n_outputs, config=cfg)
-    # fairy indices in traj: if central present, bodies 1..n
-    if traj.n_bodies == n:
-        r = traj.positions[-1]
-        v = traj.velocities[-1]
+
+    extras: list[float] = []
+    if optics_soft and has_central:
+        n_out = max(int(n_outputs), 32)
+        traj = integrate(sys, t_end=float(period), n_outputs=n_out, config=cfg)
+        t_idx = int(np.argmin(np.abs(traj.times - tau)))
+        r = traj.positions[t_idx, 1 : n + 1]
+        v = traj.velocities[t_idx, 1 : n + 1]
+        extras = list(
+            _gravity_optics_soft_extras(
+                traj,
+                seed,
+                log_rho=lr,
+                d_target=d_target,
+                w_gravity=float(w_gravity),
+                w_optics=float(w_optics),
+                encounter_factor=float(encounter_factor),
+            )
+        )
     else:
-        r = traj.positions[-1, 1 : n + 1]
-        v = traj.velocities[-1, 1 : n + 1]
+        traj = integrate(sys, t_end=tau, n_outputs=n_outputs, config=cfg)
+        if traj.n_bodies == n:
+            r = traj.positions[-1]
+            v = traj.velocities[-1]
+        else:
+            r = traj.positions[-1, 1 : n + 1]
+            v = traj.velocities[-1, 1 : n + 1]
+
     cl = closure_for_perm(r, v, r0, v0, perm)
     R = cl.R
     chunks = []
     for i, j in enumerate(perm):
         chunks.append(r[i] - R @ r0[j])
         chunks.append(v[i] - R @ v0[j])
-    return np.concatenate(chunks).astype(float)
+    base = np.concatenate(chunks).astype(float)
+    if not extras:
+        return base
+    return np.concatenate([base, np.asarray(extras, dtype=float)])
+
+
+def _gravity_optics_soft_extras(
+    traj,
+    seed: OrbitSeed,
+    *,
+    log_rho: float,
+    d_target: float | None,
+    w_gravity: float,
+    w_optics: float,
+    encounter_factor: float,
+    central_index: int = 0,
+) -> tuple[float, float]:
+    """Soft (grav_pen, optics_pen) from a period trajectory with central at 0."""
+    from fairy_orbit.observe.optical_encounter import (
+        radii_from_uniform_density,
+        soft_optics_deficit_perp,
+    )
+
+    n = seed.n_bodies
+    if traj.masses is not None and len(traj.masses) == n + 1:
+        masses = np.asarray(traj.masses, dtype=float)
+    else:
+        m_c = float(traj.masses[central_index]) if traj.masses is not None else 1.0
+        masses = np.concatenate([[m_c], np.asarray(seed.masses, dtype=float)])
+    R = radii_from_uniform_density(masses, log_rho=log_rho)
+    fairy_idx = [k for k in range(traj.n_bodies) if k != central_index]
+
+    d_min = float("inf")
+    best = (0, fairy_idx[0], fairy_idx[min(1, len(fairy_idx) - 1)])
+    for t in range(len(traj)):
+        pos = traj.positions[t]
+        for a, i in enumerate(fairy_idx):
+            for j in fairy_idx[a + 1 :]:
+                d = float(np.linalg.norm(pos[i] - pos[j]))
+                if d < d_min:
+                    d_min = d
+                    best = (t, i, j)
+
+    R_f = R[fairy_idx]
+    R_typ = float(np.mean(R_f)) if len(R_f) else 1e-3
+    target = float(d_target) if d_target is not None else 4.0 * max(R_typ, 1e-6)
+    grav_pen = float(w_gravity) * max(0.0, target - d_min) ** 2
+
+    enc_thresh = float(encounter_factor) * target
+    if d_min <= enc_thresh and len(fairy_idx) >= 2:
+        t, i, j = best
+        pos = traj.positions[t]
+        obs = pos[central_index]
+        deficit = soft_optics_deficit_perp(
+            pos[i], pos[j], float(R[i]), float(R[j]), observer=obs
+        )
+        opt_pen = float(w_optics) * deficit**2
+    else:
+        opt_pen = 0.0
+    return grav_pen, opt_pen
 
 
 @dataclass
@@ -247,6 +341,8 @@ def correct_at_mass(
     shift: int = 1,
     max_nfev: int = 10,
     period: float | None = None,
+    optics_soft: bool = True,
+    log_rho: float = 0.0,
 ) -> tuple[OrbitSeed, float, bool]:
     """Newton-ish corrector at fixed M_c; returns updated fairy seed + ||F||."""
     period = float(period if period is not None else seed.period)
@@ -255,7 +351,14 @@ def correct_at_mass(
 
     def fun(y: np.ndarray) -> np.ndarray:
         sys = unpack_into_system(y, seed, M_c, period)
-        return symmetry_residual_vector(sys, seed, period, shift=shift)
+        return symmetry_residual_vector(
+            sys,
+            seed,
+            period,
+            shift=shift,
+            optics_soft=optics_soft,
+            log_rho=log_rho,
+        )
 
     sol = least_squares(fun, y0, method="lm", max_nfev=max_nfev, ftol=1e-8, xtol=1e-8)
     sys_c = unpack_into_system(sol.x, seed, M_c, period)
@@ -288,6 +391,8 @@ def run_path_a_continuation(
     max_nfev: int = 10,
     res_tol: float = 1e-4,
     out_dir: Path | None = None,
+    optics_soft: bool = True,
+    log_rho: float = 0.0,
 ) -> dict[str, Any]:
     """
     Path A: raise M_c from 0 with adaptive step; each step LS-correct.
@@ -319,12 +424,29 @@ def run_path_a_continuation(
     current = seed
     steps = 0
     with log_path.open("a", encoding="utf-8") as logf:
-        logf.write(json.dumps({"M_c": 0.0, "residual": 0.0, "ok": True, "note": "start"}) + "\n")
+        logf.write(
+            json.dumps(
+                {
+                    "M_c": 0.0,
+                    "residual": 0.0,
+                    "ok": True,
+                    "note": "start",
+                    "optics_soft": optics_soft,
+                    "log_rho": log_rho,
+                }
+            )
+            + "\n"
+        )
         while (t_end is None or time.time() < t_end) and M_c < M_c_max - 1e-15:
             target = min(M_c + dM, M_c_max)
             try:
                 nxt, res_n, ok = correct_at_mass(
-                    current, target, shift=shift, max_nfev=max_nfev
+                    current,
+                    target,
+                    shift=shift,
+                    max_nfev=max_nfev,
+                    optics_soft=optics_soft,
+                    log_rho=log_rho,
                 )
             except Exception as exc:
                 row = {"M_c": target, "error": str(exc), "dM": dM}
@@ -361,6 +483,8 @@ def run_path_a_continuation(
         "steps": steps,
         "wall_hours": wall_hours,
         "out_dir": str(out_dir),
+        "optics_soft": optics_soft,
+        "log_rho": log_rho,
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     save_seed(current, out_dir / "final.json")

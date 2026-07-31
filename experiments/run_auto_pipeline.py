@@ -14,6 +14,14 @@ import sys
 import time
 from pathlib import Path
 
+from fairy_orbit.observe.campaign_prefs import (
+    CERTIFY_ATOL_REL,
+    CERTIFY_MAX_RESIDUAL,
+    CHOREO_N5_IN_DEFAULT_CAMPAIGN,
+    FLOQUET_GATE_DEFAULT,
+    campaign_priority_blurb,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -55,10 +63,12 @@ def ensure_searches(
     *,
     wall_hours: float,
     fresh: bool,
-    atol_rel: float = 1e-8,
-    max_residual: float = 1e-6,
+    atol_rel: float = CERTIFY_ATOL_REL,
+    max_residual: float = CERTIFY_MAX_RESIDUAL,
+    floquet_gate: bool = FLOQUET_GATE_DEFAULT,
+    ns: tuple[int, ...] = (4,),
 ) -> list[subprocess.Popen]:
-    """Start missing N=4 / N=5 search workers; return newly spawned procs."""
+    """Start missing search workers for ``ns`` (default N=4 only)."""
     running = _running_search_pids()
     have = set()
     for _pid, cmd in running:
@@ -74,7 +84,7 @@ def ensure_searches(
     log_dir = ROOT / "experiments" / "output" / "prompt_campaign_logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     spawned: list[subprocess.Popen] = []
-    for n in (4, 5):
+    for n in ns:
         if n in have and not fresh:
             print(f"search n={n} already running — skip launch", flush=True)
             continue
@@ -90,6 +100,8 @@ def ensure_searches(
             "--max-residual",
             str(max_residual),
         ]
+        if not floquet_gate:
+            cmd.append("--no-floquet-gate")
         if fresh:
             cmd.append("--fresh")
         log = log_dir / f"choreo_n{n}.log"
@@ -162,9 +174,19 @@ def main() -> None:
     p.add_argument("--min-sep", type=float, default=0.15)
     p.add_argument("--periods", type=float, default=1.0)
     p.add_argument("--max-frames", type=int, default=140)
-    p.add_argument("--atol-rel", type=float, default=1e-8)
-    p.add_argument("--max-residual", type=float, default=1e-6)
+    p.add_argument("--atol-rel", type=float, default=CERTIFY_ATOL_REL)
+    p.add_argument("--max-residual", type=float, default=CERTIFY_MAX_RESIDUAL)
     p.add_argument("--fresh", action="store_true", help="clear search DB before launch")
+    p.add_argument(
+        "--no-floquet-gate",
+        action="store_true",
+        help="disable Floquet certify on launched searches (not recommended)",
+    )
+    p.add_argument(
+        "--with-n5",
+        action="store_true",
+        help="also launch N=5 search (off by default; threads 7:2:6:1)",
+    )
     p.add_argument(
         "--plot-once",
         action="store_true",
@@ -177,12 +199,17 @@ def main() -> None:
     )
     args = p.parse_args()
 
+    print(campaign_priority_blurb(), flush=True)
     status_path = ROOT / "experiments" / "output" / "pipeline_status.json"
+    floquet_gate = FLOQUET_GATE_DEFAULT and not args.no_floquet_gate
+    ns: tuple[int, ...] = (4, 5) if (args.with_n5 or CHOREO_N5_IN_DEFAULT_CAMPAIGN) else (4,)
     spawned = ensure_searches(
         wall_hours=args.wall_hours,
         fresh=args.fresh,
         atol_rel=args.atol_rel,
         max_residual=args.max_residual,
+        floquet_gate=floquet_gate,
+        ns=ns,
     )
 
     if not args.no_plot:
@@ -230,6 +257,8 @@ def main() -> None:
                 fresh=False,
                 atol_rel=args.atol_rel,
                 max_residual=args.max_residual,
+                floquet_gate=floquet_gate,
+                ns=ns,
             )
             run_family_plots(
                 n_families=args.n_families,

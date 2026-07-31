@@ -28,7 +28,13 @@ from fairy_orbit.observe.choreography_verify import (
     is_regular_equal_ngon,
 )
 from fairy_orbit.observe.closure import closure_for_perm
+from fairy_orbit.observe.family_class import (
+    FamilyHitAnnealer,
+    action_proxy,
+    family_classification_key,
+)
 from fairy_orbit.observe.shape_families import shape_distance, shape_feature_vector
+from fairy_orbit.observe.stability import floquet_multipliers_fd
 from fairy_orbit.store.search_db import (
     DEFAULT_SEARCH_DB_NAME,
     ChoreographySearchStore,
@@ -251,12 +257,7 @@ def sample_search_start(
 
 @dataclass
 class ResidualAnnealer:
-    """Map residual convergence speed → probability of away-family starts.
-
-    Early / still-improving search stays near baseline (mine current families).
-    When the rolling best residual is already low *and* improvement stalls,
-    raise ``away_prob`` so new starts leave known shape basins (anneal out).
-    """
+    """Deprecated alias — residual stall heuristic replaced by FamilyHitAnnealer."""
 
     window: int = 40
     warmup: int = 24
@@ -289,32 +290,16 @@ class ResidualAnnealer:
         self._best_curve.append(self.best)
 
     def away_prob(self) -> float:
+        # Kept for old unit tests; prefer FamilyHitAnnealer in search.
         if self.n_obs < int(self.warmup) or len(self._best_curve) < 4:
             return float(self.away_min)
-
         older = float(self._best_curve[0])
         newer = float(self._best_curve[-1])
-        recent = list(self._residuals)
-        med = float(np.median(recent)) if recent else newer
-
-        # improvement factor over the window (>1 means best got better)
         improve = older / max(newer, 1e-300)
         stalled = improve < float(self.stall_improve_factor)
-        rapidly_improving = improve >= 2.0
-
-        score = 0.0
-        if newer <= float(self.very_low_residual):
-            score += 0.55
-        elif newer <= float(self.low_residual):
-            score += 0.35
+        score = 0.35 if newer <= float(self.low_residual) else 0.0
         if stalled and newer <= float(self.low_residual):
             score += 0.35
-        if med <= float(self.low_residual):
-            score += 0.15
-        if rapidly_improving and newer > float(self.very_low_residual):
-            # still mining a productive basin — keep away low
-            score *= 0.35
-
         return float(
             np.clip(
                 self.away_min + score * (self.away_max - self.away_min),
@@ -330,7 +315,148 @@ class ResidualAnnealer:
             "away_prob": self.away_prob(),
             "window": int(self.window),
             "warmup": int(self.warmup),
+            "deprecated": True,
         }
+
+
+def _family_keys_from_passes(
+    store: ChoreographySearchStore,
+    n_bodies: int,
+    *,
+    max_residual: float | None,
+) -> list[str]:
+    keys: list[str] = []
+    for rec in store.list_passes(n_bodies, limit=10_000, max_residual=max_residual):
+        if not rec.seed_json:
+            continue
+        try:
+            seed = OrbitSeed.from_dict(rec.seed_json)
+            ver = seed.verification or {}
+            label = str(ver.get("perm_label") or "")
+            if not label:
+                continue
+            if "family_key" in ver and ver["family_key"]:
+                keys.append(str(ver["family_key"]))
+            else:
+                keys.append(
+                    family_classification_key(
+                        seed,
+                        perm_label=label,
+                        action=ver.get("action_proxy"),
+                    )
+                )
+        except Exception:
+            continue
+    return keys
+
+
+def scout_then_certify(
+    polished: OrbitSeed,
+    *,
+    residual: float,
+    shift: int,
+    scout_atol_rel: float,
+    scout_max_residual: float,
+    certify_atol_rel: float,
+    certify_max_residual: float,
+    n_outputs: int = 16,
+    ngon_samples: int = 8,
+    require_floquet_stable: bool = True,
+    floquet_stable_atol: float = 0.05,
+) -> dict[str, Any]:
+    """
+    Funnel: loose scout §3.2 → family key → tight certify (+ optional Floquet).
+    """
+    sys = polished.to_system()
+    period = float(polished.period)
+    out: dict[str, Any] = {
+        "scout_ok": False,
+        "certified": False,
+        "reason": "failed_prompt_3_2",
+        "maintains_regular_ngon": False,
+        "family_key": None,
+        "family_new": None,
+        "action_proxy": None,
+        "floquet": None,
+        "acc": None,
+    }
+    if residual > float(scout_max_residual):
+        out["reason"] = "failed_scout_residual"
+        return out
+
+    scout = accept_free_choreography(
+        sys,
+        period,
+        shift=shift,
+        atol_rel=float(scout_atol_rel),
+        n_outputs=n_outputs,
+        ngon_samples=ngon_samples,
+    )
+    out["acc"] = scout
+    out["maintains_regular_ngon"] = bool(scout.maintains_regular_ngon)
+    if not scout.ok:
+        out["reason"] = scout.reason
+        return out
+
+    out["scout_ok"] = True
+    act = action_proxy(polished)
+    out["action_proxy"] = act
+    key = family_classification_key(
+        polished, perm_label=scout.choreography.perm_label, action=act
+    )
+    out["family_key"] = key
+
+    if residual > float(certify_max_residual):
+        out["reason"] = "failed_certify_residual"
+        return out
+
+    # Reuse scout evidence when residuals already meet certify atol.
+    if (
+        scout.choreography.E_r_rel <= float(certify_atol_rel)
+        and scout.choreography.E_v_rel <= float(certify_atol_rel)
+    ):
+        cert_ok = True
+        acc_final = scout
+    else:
+        cert = accept_free_choreography(
+            sys,
+            period,
+            shift=shift,
+            atol_rel=float(certify_atol_rel),
+            n_outputs=n_outputs,
+            ngon_samples=ngon_samples,
+        )
+        out["acc"] = cert
+        out["maintains_regular_ngon"] = bool(cert.maintains_regular_ngon)
+        if not cert.ok:
+            out["reason"] = (
+                "failed_certify_prompt_3_2"
+                if cert.reason == "failed_prompt_3_2"
+                else cert.reason
+            )
+            return out
+        cert_ok = True
+        acc_final = cert
+
+    if require_floquet_stable:
+        try:
+            fl = floquet_multipliers_fd(
+                polished, shift=shift, stable_atol=float(floquet_stable_atol)
+            )
+            out["floquet"] = fl.to_dict()
+            if not fl.stable:
+                out["reason"] = "failed_floquet_unstable"
+                out["acc"] = acc_final
+                return out
+        except Exception as exc:  # pragma: no cover
+            out["reason"] = f"failed_floquet_error:{exc}"
+            out["acc"] = acc_final
+            return out
+
+    out["certified"] = True
+    out["reason"] = "ok"
+    out["acc"] = acc_final
+    return out
 
 
 def symmetry_residual_seed(
@@ -492,6 +618,8 @@ def run_choreography_search(
     fresh: bool = False,
     atol_rel: float = 1e-8,
     max_residual: float = 1e-6,
+    scout_atol_rel: float = 1e-5,
+    scout_max_residual: float = 1e-3,
     write_pass_json: bool = False,
     import_json: bool = False,
     archive_json: bool = True,
@@ -500,21 +628,18 @@ def run_choreography_search(
     away_tries: int = 24,
     anneal_window: int = 40,
     anneal_warmup: int = 24,
+    require_floquet_stable: bool = True,
+    floquet_stable_atol: float = 0.05,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """
     Long-running multi-start §3.2 polish for free equal-mass N-body.
 
-    Accept only if §3.2 ``atol_rel`` holds, polish residual ``<= max_residual``,
-    and the orbit does not maintain a regular n-gon. Resumes from SQLite.
+    Funnel: loose scout gate → §3.3 family key / hit-rate anneal → tight certify
+    (``atol_rel`` / ``max_residual``). Only certified passes are stored as accepts.
 
-    Start sampling anneals by residual convergence: while the rolling best is
-    still improving, prefer baseline ICs (mine families); when residuals are
-    already low and improvement stalls, raise the probability of away-family
-    starts. Pass ``away_family_frac`` to override with a fixed probability.
-
-    Accepted seeds are stored in SQLite (``seed_json``). Per-pass ``pass_*.json``
-    files are off by default; only ``best.json`` is refreshed on disk.
+    ``away_prob`` follows rolling new-family hit rate among scout accepts unless
+    ``away_family_frac`` overrides it.
     """
     out_dir = Path(out_dir or f"experiments/output/choreography_search_n{n}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -522,6 +647,8 @@ def run_choreography_search(
     log_path = out_dir / "trials.jsonl"
     atol_rel = float(atol_rel)
     max_residual = float(max_residual)
+    scout_atol_rel = float(scout_atol_rel)
+    scout_max_residual = float(scout_max_residual)
     away_min_sep = float(away_min_sep)
     away_tries = int(away_tries)
     fixed_away = None if away_family_frac is None else float(away_family_frac)
@@ -551,25 +678,29 @@ def run_choreography_search(
         family_feats = accepted_shape_features(
             store, n, max_residual=max_residual
         )
-        annealer = ResidualAnnealer(
+        annealer = FamilyHitAnnealer(
             window=int(anneal_window),
             warmup=int(anneal_warmup),
         )
-        annealer.seed_from_residuals(
-            store.list_recent_residuals(n, limit=int(anneal_window))
+        annealer.seed_seen(
+            _family_keys_from_passes(store, n, max_residual=max_residual)
         )
         skipped_dupes = 0
         n_away = 0
         n_baseline = 0
+        n_scout = 0
+        n_certified = 0
         print(
             f"[search n={n}] db={db_path} resume_trial={trial_no} "
             f"stored={store.count_trials(n)} passed={store.count_passed(n)} "
             f"imported={imported} demoted={demoted} archived_json={archived} "
-            f"atol_rel={atol_rel:g} max_residual={max_residual:g} "
+            f"scout_atol={scout_atol_rel:g} scout_max_res={scout_max_residual:g} "
+            f"certify_atol={atol_rel:g} certify_max_res={max_residual:g} "
             f"write_pass_json={write_pass_json} "
-            f"away_mode={'fixed:'+str(fixed_away) if fixed_away is not None else 'anneal'} "
+            f"away_mode={'fixed:'+str(fixed_away) if fixed_away is not None else 'family_hit'} "
             f"away_prob={fixed_away if fixed_away is not None else annealer.away_prob():.3f} "
-            f"away_min_sep={away_min_sep:g} family_feats={len(family_feats)}",
+            f"floquet_gate={require_floquet_stable} "
+            f"seen_families={len(annealer.seen)} family_feats={len(family_feats)}",
             flush=True,
         )
 
@@ -602,19 +733,26 @@ def run_choreography_search(
 
                 try:
                     polished, res_n = polish_seed(start, shift=shift, max_nfev=max_nfev)
-                    acc = accept_free_choreography(
-                        polished.to_system(),
-                        polished.period,
+                    funnel = scout_then_certify(
+                        polished,
+                        residual=res_n,
                         shift=shift,
-                        atol_rel=atol_rel,
-                        n_outputs=16,
-                        ngon_samples=8,
+                        scout_atol_rel=scout_atol_rel,
+                        scout_max_residual=scout_max_residual,
+                        certify_atol_rel=atol_rel,
+                        certify_max_residual=max_residual,
+                        require_floquet_stable=require_floquet_stable,
+                        floquet_stable_atol=floquet_stable_atol,
                     )
-                    ok = bool(acc.ok)
-                    reason = acc.reason
-                    if ok and res_n > max_residual:
-                        ok = False
-                        reason = "failed_residual_too_large"
+                    acc = funnel["acc"]
+                    reason = str(funnel["reason"])
+                    family_key = funnel["family_key"]
+                    family_new = None
+                    if funnel["scout_ok"] and family_key:
+                        n_scout += 1
+                        family_new = annealer.observe_scout(str(family_key))
+                        funnel["family_new"] = family_new
+                    ok = bool(funnel["certified"])
                     result_fp = seed_fingerprint(polished)
                     path = None
                     duplicate_result = ok and store.has_accepted_result_fp(n, result_fp)
@@ -626,6 +764,14 @@ def run_choreography_search(
                         gate_pass = False
                     elif ok:
                         gate_pass = True
+                        n_certified += 1
+                        ver = acc.to_dict() if acc is not None else {}
+                        ver["family_key"] = family_key
+                        ver["action_proxy"] = funnel["action_proxy"]
+                        ver["scout_ok"] = True
+                        ver["certified"] = True
+                        if funnel.get("floquet") is not None:
+                            ver["floquet"] = funnel["floquet"]
                         save_seed_obj = OrbitSeed(
                             id=f"search_n{n}_{trial_no:05d}",
                             family=polished.family,
@@ -638,9 +784,9 @@ def run_choreography_search(
                             names=polished.names,
                             symmetry="accepted_non_maintained_ngon",
                             source="choreography_search",
-                            notes=f"trial={trial_no} residual={res_n:.3e}",
+                            notes=f"trial={trial_no} residual={res_n:.3e} family={family_key}",
                             central_index=None,
-                            verification=acc.to_dict(),
+                            verification=ver,
                         )
                         if write_pass_json:
                             path = str(out_dir / f"pass_{n}_{trial_no:05d}.json")
@@ -655,8 +801,6 @@ def run_choreography_search(
                     else:
                         gate_pass = False
 
-                    annealer.observe(res_n)
-
                     row_id = store.insert_trial(
                         n_bodies=n,
                         trial_no=trial_no,
@@ -666,7 +810,7 @@ def run_choreography_search(
                         period=float(polished.period),
                         ok_gate=gate_pass,
                         reason=reason,
-                        maintains_regular_ngon=bool(acc.maintains_regular_ngon),
+                        maintains_regular_ngon=bool(funnel["maintains_regular_ngon"]),
                         seed=save_seed_obj,
                     )
                     if row_id is None:
@@ -674,19 +818,37 @@ def run_choreography_search(
                         trial_no += 1
                         continue
 
+                    hit_rate = annealer.family_hit_rate()
                     row = {
                         "trial": trial_no,
                         "residual": res_n,
                         "period": polished.period,
                         "ok_gate": gate_pass,
+                        "scout_ok": bool(funnel["scout_ok"]),
+                        "certified": bool(funnel["certified"]),
                         "reason": reason,
-                        "maintains_regular_ngon": acc.maintains_regular_ngon,
+                        "maintains_regular_ngon": funnel["maintains_regular_ngon"],
+                        "family_key": family_key,
+                        "family_new": family_new,
+                        "family_hit_rate": hit_rate,
+                        "floquet_stable": (
+                            None
+                            if funnel.get("floquet") is None
+                            else funnel["floquet"].get("stable")
+                        ),
+                        "floquet_max_abs": (
+                            None
+                            if funnel.get("floquet") is None
+                            else funnel["floquet"].get("max_abs")
+                        ),
                         "path": path,
                         "start_fp": start_fp,
                         "result_fp": result_fp,
                         "duplicate_result": duplicate_result,
                         "atol_rel": atol_rel,
                         "max_residual": max_residual,
+                        "scout_atol_rel": scout_atol_rel,
+                        "scout_max_residual": scout_max_residual,
                         "start_mode": start_mode,
                         "away_prob": away_prob,
                         "start_family_dist": (
@@ -710,11 +872,15 @@ def run_choreography_search(
                     )
                     summary["atol_rel"] = atol_rel
                     summary["max_residual"] = max_residual
+                    summary["scout_atol_rel"] = scout_atol_rel
+                    summary["scout_max_residual"] = scout_max_residual
                     summary["away_family_frac"] = fixed_away
                     summary["away_prob"] = away_prob
                     summary["anneal"] = annealer.status()
                     summary["starts_away"] = n_away
                     summary["starts_baseline"] = n_baseline
+                    summary["n_scout"] = n_scout
+                    summary["n_certified"] = n_certified
                     summary["family_feats"] = len(family_feats)
                     (out_dir / "summary.json").write_text(
                         json.dumps(summary, indent=2), encoding="utf-8"
@@ -759,6 +925,8 @@ def run_choreography_search(
         )
         summary["atol_rel"] = atol_rel
         summary["max_residual"] = max_residual
+        summary["scout_atol_rel"] = scout_atol_rel
+        summary["scout_max_residual"] = scout_max_residual
         summary["away_family_frac"] = fixed_away
         summary["away_min_sep"] = away_min_sep
         summary["away_prob"] = (
@@ -769,6 +937,8 @@ def run_choreography_search(
         summary["anneal"] = annealer.status()
         summary["starts_away"] = n_away
         summary["starts_baseline"] = n_baseline
+        summary["n_scout"] = n_scout
+        summary["n_certified"] = n_certified
         summary["family_feats"] = len(family_feats)
         (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
         return summary

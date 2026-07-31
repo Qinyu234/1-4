@@ -10,7 +10,24 @@ from fairy_orbit.observe.calibration import (
 )
 from fairy_orbit.observe.diagnose import Diagnosis, diagnose
 from fairy_orbit.observe.elements_series import ElementSeries, extract_element_series
-from fairy_orbit.observe.encounters import EncounterEvent, find_encounters
+from fairy_orbit.observe.encounters import (
+    EncounterEvent,
+    annotate_encounters,
+    find_encounters,
+    find_encounters_optical,
+)
+from fairy_orbit.observe.optical_encounter import (
+    DEFAULT_LOG_RHO,
+    LOG_RHO_MAX,
+    LOG_RHO_MIN,
+    VisualOverlapHit,
+    optical_overlap_angular,
+    optical_overlap_perp,
+    radii_from_uniform_density,
+    rho_from_log_rho,
+    scan_visual_overlaps,
+    verify_visual_overlap,
+)
 from fairy_orbit.observe.interest import a_order_changed, interestingness
 from fairy_orbit.observe.resonance import ResonanceSeries, resonance_angles
 from fairy_orbit.observe.closure import (
@@ -72,6 +89,18 @@ __all__ = [
     "extract_element_series",
     "EncounterEvent",
     "find_encounters",
+    "find_encounters_optical",
+    "annotate_encounters",
+    "optical_overlap_perp",
+    "optical_overlap_angular",
+    "verify_visual_overlap",
+    "scan_visual_overlaps",
+    "radii_from_uniform_density",
+    "rho_from_log_rho",
+    "VisualOverlapHit",
+    "DEFAULT_LOG_RHO",
+    "LOG_RHO_MIN",
+    "LOG_RHO_MAX",
     "ResonanceSeries",
     "resonance_angles",
     "a_order_changed",
