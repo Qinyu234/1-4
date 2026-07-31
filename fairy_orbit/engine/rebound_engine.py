@@ -75,6 +75,42 @@ def rebound_to_system(sim: "rebound.Simulation", template: System) -> System:
     return out
 
 
+def particles_rv(sim: "rebound.Simulation", n: int) -> tuple[np.ndarray, np.ndarray]:
+    """Read particle positions/velocities without System copies."""
+    r = np.empty((n, 3), dtype=float)
+    v = np.empty((n, 3), dtype=float)
+    for i in range(n):
+        p = sim.particles[i]
+        r[i, 0], r[i, 1], r[i, 2] = p.x, p.y, p.z
+        v[i, 0], v[i, 1], v[i, 2] = p.vx, p.vy, p.vz
+    return r, v
+
+
+def integrate_endpoint(
+    system: System,
+    t_end: float,
+    config: ReboundConfig | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Integrate once to ``t_end`` and return final (positions, velocities).
+
+    Skips Trajectory bookkeeping, energy/L samples, and intermediate outputs —
+    intended for polish residual / Jacobian evaluations that only need the
+    endpoint state.
+    """
+    config = config or ReboundConfig()
+    if not REBOUND_AVAILABLE:
+        raise ImportError("REBOUND is not installed. Install with: pip install rebound")
+
+    sim = system_to_rebound(system)
+    sim.integrator = config.integrator
+    if config.integrator.lower() != "ias15":
+        sim.dt = config.dt
+    _apply_ias15_precision(sim, config)
+    sim.integrate(float(t_end))
+    return particles_rv(sim, system.n)
+
+
 def integrate(
     system: System,
     t_end: float,

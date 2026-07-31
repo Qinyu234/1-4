@@ -322,6 +322,26 @@ class ChoreographySearchStore:
             )
         return [self._row_to_record(r) for r in cur.fetchall()]
 
+    def list_recent_residuals(
+        self,
+        n_bodies: int,
+        *,
+        limit: int = 80,
+    ) -> list[float]:
+        """Oldest→newest residuals among the latest trials with a residual."""
+        cur = self._conn.execute(
+            """
+            SELECT residual FROM trials
+            WHERE n_bodies=? AND residual IS NOT NULL
+            ORDER BY trial_no DESC
+            LIMIT ?
+            """,
+            (int(n_bodies), int(limit)),
+        )
+        vals = [float(r[0]) for r in cur.fetchall()]
+        vals.reverse()
+        return vals
+
     def refilter_by_residual(
         self,
         n_bodies: int,

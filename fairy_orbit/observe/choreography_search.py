@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 import math
 import time
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -20,13 +21,14 @@ from scipy.optimize import least_squares
 
 from fairy_orbit.core.body import Body, System, to_com_inertial_frame
 from fairy_orbit.design.seeds import OrbitSeed, load_seed, save_seed
-from fairy_orbit.engine.rebound_engine import ReboundConfig, integrate
+from fairy_orbit.engine.rebound_engine import ReboundConfig, integrate_endpoint
 from fairy_orbit.observe.choreography_verify import (
     accept_free_choreography,
     cyclic_role_perm,
     is_regular_equal_ngon,
 )
 from fairy_orbit.observe.closure import closure_for_perm
+from fairy_orbit.observe.shape_families import shape_distance, shape_feature_vector
 from fairy_orbit.store.search_db import (
     DEFAULT_SEARCH_DB_NAME,
     ChoreographySearchStore,
@@ -111,23 +113,47 @@ def random_asymmetric_seed(
     *,
     G: float = 1.0,
     mass: float = 1.0,
+    mode: str = "baseline",
 ) -> OrbitSeed:
-    """Random planar IC (unequal radii/gaps preferred; polygonal snapshot OK)."""
-    gaps = rng.uniform(0.3, 1.7, size=n)
+    """Random planar IC (unequal radii/gaps preferred; polygonal snapshot OK).
+
+    ``mode="away"`` uses wider radii/gap/speed/period ranges and small z so
+    starts tend to leave the shape neighborhood of already-found families.
+    """
+    away = mode == "away"
+    if away:
+        gaps = rng.uniform(0.12, 2.4, size=n)
+        radii = rng.uniform(0.2, 2.6, size=n)
+        speed_lo, speed_hi = 0.25, 1.9
+        vr_scale = 0.35
+        z_scale = 0.12
+        period = float(rng.uniform(3.0, 14.0))
+        notes = "random planar start (away-family ranges)"
+        source = "random_asymmetric_ic_away"
+    else:
+        gaps = rng.uniform(0.3, 1.7, size=n)
+        radii = rng.uniform(0.4, 1.6, size=n)
+        speed_lo, speed_hi = 0.4, 1.4
+        vr_scale = 0.15
+        z_scale = 0.0
+        period = float(rng.uniform(4.0, 10.0))
+        notes = "random planar start"
+        source = "random_asymmetric_ic"
+
     gaps = gaps / gaps.sum() * 2.0 * math.pi
     angles = np.cumsum(gaps) - gaps[0]
-    radii = rng.uniform(0.4, 1.6, size=n)
     pos = np.zeros((n, 3))
     vel = np.zeros((n, 3))
     for i in range(n):
         c, s = math.cos(angles[i]), math.sin(angles[i])
-        pos[i] = (radii[i] * c, radii[i] * s, 0.0)
-        speed = rng.uniform(0.4, 1.4)
+        z = float(rng.normal(0.0, z_scale)) if z_scale > 0 else 0.0
+        pos[i] = (radii[i] * c, radii[i] * s, z)
+        speed = rng.uniform(speed_lo, speed_hi)
         vt = speed * (0.85 + 0.15 * rng.random())
-        vr = rng.normal(0.0, 0.15)
-        vel[i] = (-vt * s + vr * c, vt * c + vr * s, 0.0)
+        vr = rng.normal(0.0, vr_scale)
+        vz = float(rng.normal(0.0, 0.5 * z_scale)) if z_scale > 0 else 0.0
+        vel[i] = (-vt * s + vr * c, vt * c + vr * s, vz)
 
-    period = float(rng.uniform(4.0, 10.0))
     names = tuple(f"B{i+1}" for i in range(n))
     family = f"free_{n}"
     sys = System(
@@ -149,10 +175,162 @@ def random_asymmetric_seed(
         velocities=np.stack([b.velocity for b in sys.bodies]),
         names=names,
         symmetry="asymmetric_search",
-        source="random_asymmetric_ic",
-        notes="random planar start",
+        source=source,
+        notes=notes,
         central_index=None,
     )
+
+
+def accepted_shape_features(
+    store: ChoreographySearchStore,
+    n_bodies: int,
+    *,
+    max_residual: float | None = 1e-6,
+    limit: int = 4000,
+) -> list[np.ndarray]:
+    """Shape features of currently accepted passes (for away-family sampling)."""
+    feats: list[np.ndarray] = []
+    for rec in store.list_passes(n_bodies, limit=limit, max_residual=max_residual):
+        if rec.seed_json is None:
+            continue
+        try:
+            feats.append(shape_feature_vector(OrbitSeed.from_dict(rec.seed_json)))
+        except Exception:
+            continue
+    return feats
+
+
+def min_distance_to_features(feat: np.ndarray, features: list[np.ndarray]) -> float:
+    if not features:
+        return float("inf")
+    return min(shape_distance(feat, f) for f in features)
+
+
+def sample_search_start(
+    n: int,
+    rng: np.random.Generator,
+    family_feats: list[np.ndarray],
+    *,
+    away_prob: float,
+    away_min_sep: float = 0.12,
+    away_tries: int = 24,
+) -> tuple[OrbitSeed, str, float]:
+    """
+    Draw a search IC; with probability ``away_prob`` prefer starts far from
+    accepted shape families (rejection / best-effort).
+
+    ``away_prob`` is normally driven by :class:`ResidualAnnealer` (not a fixed
+    50/50 split).
+
+    Returns ``(seed, start_mode, min_dist_to_families)``.
+    """
+    away_prob = float(np.clip(away_prob, 0.0, 1.0))
+    want_away = bool(rng.random() < away_prob)
+    if not want_away:
+        seed = random_asymmetric_seed(n, rng, mode="baseline")
+        d = min_distance_to_features(shape_feature_vector(seed), family_feats)
+        return seed, "baseline", d
+
+    if not family_feats:
+        seed = random_asymmetric_seed(n, rng, mode="away")
+        return seed, "away_no_families", float("inf")
+
+    best: OrbitSeed | None = None
+    best_d = -1.0
+    for _ in range(max(1, int(away_tries))):
+        cand = random_asymmetric_seed(n, rng, mode="away")
+        d = min_distance_to_features(shape_feature_vector(cand), family_feats)
+        if d >= float(away_min_sep):
+            return cand, "away", d
+        if d > best_d:
+            best_d = d
+            best = cand
+    assert best is not None
+    return best, "away_best_effort", best_d
+
+
+@dataclass
+class ResidualAnnealer:
+    """Map residual convergence speed → probability of away-family starts.
+
+    Early / still-improving search stays near baseline (mine current families).
+    When the rolling best residual is already low *and* improvement stalls,
+    raise ``away_prob`` so new starts leave known shape basins (anneal out).
+    """
+
+    window: int = 40
+    warmup: int = 24
+    low_residual: float = 1e-3
+    very_low_residual: float = 1e-6
+    stall_improve_factor: float = 1.25
+    away_min: float = 0.05
+    away_max: float = 0.9
+    _residuals: deque[float] = field(default_factory=deque, repr=False)
+    _best_curve: deque[float] = field(default_factory=deque, repr=False)
+    best: float = field(default=float("inf"))
+    n_obs: int = 0
+
+    def __post_init__(self) -> None:
+        self._residuals = deque(maxlen=int(self.window))
+        self._best_curve = deque(maxlen=int(self.window))
+
+    def seed_from_residuals(self, residuals: list[float]) -> None:
+        for r in residuals:
+            self.observe(r)
+
+    def observe(self, residual: float | None) -> None:
+        if residual is None or not np.isfinite(residual):
+            return
+        r = float(residual)
+        self.n_obs += 1
+        self._residuals.append(r)
+        if r < self.best:
+            self.best = r
+        self._best_curve.append(self.best)
+
+    def away_prob(self) -> float:
+        if self.n_obs < int(self.warmup) or len(self._best_curve) < 4:
+            return float(self.away_min)
+
+        older = float(self._best_curve[0])
+        newer = float(self._best_curve[-1])
+        recent = list(self._residuals)
+        med = float(np.median(recent)) if recent else newer
+
+        # improvement factor over the window (>1 means best got better)
+        improve = older / max(newer, 1e-300)
+        stalled = improve < float(self.stall_improve_factor)
+        rapidly_improving = improve >= 2.0
+
+        score = 0.0
+        if newer <= float(self.very_low_residual):
+            score += 0.55
+        elif newer <= float(self.low_residual):
+            score += 0.35
+        if stalled and newer <= float(self.low_residual):
+            score += 0.35
+        if med <= float(self.low_residual):
+            score += 0.15
+        if rapidly_improving and newer > float(self.very_low_residual):
+            # still mining a productive basin — keep away low
+            score *= 0.35
+
+        return float(
+            np.clip(
+                self.away_min + score * (self.away_max - self.away_min),
+                self.away_min,
+                self.away_max,
+            )
+        )
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "n_obs": self.n_obs,
+            "best": None if not np.isfinite(self.best) else float(self.best),
+            "away_prob": self.away_prob(),
+            "window": int(self.window),
+            "warmup": int(self.warmup),
+        }
 
 
 def symmetry_residual_seed(
@@ -161,16 +339,17 @@ def symmetry_residual_seed(
     shift: int = 1,
     n_outputs: int = 12,
 ) -> np.ndarray:
+    """§3.2 residual at T/n. ``n_outputs`` kept for API compat; endpoint-only integrate."""
+    del n_outputs  # endpoint path does not sample intermediates
     n = seed.n_bodies
     tau = float(seed.period) / n
     perm = cyclic_role_perm(n, shift=shift)
     r0 = np.asarray(seed.positions, dtype=float)
     v0 = np.asarray(seed.velocities, dtype=float)
     sys = seed.to_system()
-    traj = integrate(
+    r, v = integrate_endpoint(
         sys,
         t_end=tau,
-        n_outputs=n_outputs,
         config=ReboundConfig(
             stop_on_escape=False,
             stop_on_collision=False,
@@ -179,8 +358,6 @@ def symmetry_residual_seed(
             min_dt=1e-5,
         ),
     )
-    r = traj.positions[-1]
-    v = traj.velocities[-1]
     cl = closure_for_perm(r, v, r0, v0, perm)
     R = cl.R
     chunks = []
@@ -318,6 +495,11 @@ def run_choreography_search(
     write_pass_json: bool = False,
     import_json: bool = False,
     archive_json: bool = True,
+    away_family_frac: float | None = None,
+    away_min_sep: float = 0.12,
+    away_tries: int = 24,
+    anneal_window: int = 40,
+    anneal_warmup: int = 24,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """
@@ -325,6 +507,11 @@ def run_choreography_search(
 
     Accept only if §3.2 ``atol_rel`` holds, polish residual ``<= max_residual``,
     and the orbit does not maintain a regular n-gon. Resumes from SQLite.
+
+    Start sampling anneals by residual convergence: while the rolling best is
+    still improving, prefer baseline ICs (mine families); when residuals are
+    already low and improvement stalls, raise the probability of away-family
+    starts. Pass ``away_family_frac`` to override with a fixed probability.
 
     Accepted seeds are stored in SQLite (``seed_json``). Per-pass ``pass_*.json``
     files are off by default; only ``best.json`` is refreshed on disk.
@@ -335,6 +522,9 @@ def run_choreography_search(
     log_path = out_dir / "trials.jsonl"
     atol_rel = float(atol_rel)
     max_residual = float(max_residual)
+    away_min_sep = float(away_min_sep)
+    away_tries = int(away_tries)
+    fixed_away = None if away_family_frac is None else float(away_family_frac)
 
     t_end = (
         None
@@ -358,20 +548,51 @@ def run_choreography_search(
         if best_rec is not None and best_rec.seed_json is not None:
             save_seed(OrbitSeed.from_dict(best_rec.seed_json), out_dir / "best.json")
 
+        family_feats = accepted_shape_features(
+            store, n, max_residual=max_residual
+        )
+        annealer = ResidualAnnealer(
+            window=int(anneal_window),
+            warmup=int(anneal_warmup),
+        )
+        annealer.seed_from_residuals(
+            store.list_recent_residuals(n, limit=int(anneal_window))
+        )
         skipped_dupes = 0
+        n_away = 0
+        n_baseline = 0
         print(
             f"[search n={n}] db={db_path} resume_trial={trial_no} "
             f"stored={store.count_trials(n)} passed={store.count_passed(n)} "
             f"imported={imported} demoted={demoted} archived_json={archived} "
             f"atol_rel={atol_rel:g} max_residual={max_residual:g} "
-            f"write_pass_json={write_pass_json}",
+            f"write_pass_json={write_pass_json} "
+            f"away_mode={'fixed:'+str(fixed_away) if fixed_away is not None else 'anneal'} "
+            f"away_prob={fixed_away if fixed_away is not None else annealer.away_prob():.3f} "
+            f"away_min_sep={away_min_sep:g} family_feats={len(family_feats)}",
             flush=True,
         )
 
         with log_path.open("a", encoding="utf-8") as logf:
             while t_end is None or time.time() < t_end:
                 rng = trial_rng(n, trial_no)
-                start = random_asymmetric_seed(n, rng)
+                away_prob = (
+                    float(np.clip(fixed_away, 0.0, 1.0))
+                    if fixed_away is not None
+                    else annealer.away_prob()
+                )
+                start, start_mode, start_family_dist = sample_search_start(
+                    n,
+                    rng,
+                    family_feats,
+                    away_prob=away_prob,
+                    away_min_sep=away_min_sep,
+                    away_tries=away_tries,
+                )
+                if start_mode.startswith("away"):
+                    n_away += 1
+                else:
+                    n_baseline += 1
                 start_fp = seed_fingerprint(start)
 
                 if store.has_start_fp(n, start_fp):
@@ -427,8 +648,14 @@ def run_choreography_search(
                         if res_n < best_res:
                             best_res = res_n
                             save_seed(save_seed_obj, out_dir / "best.json")
+                        try:
+                            family_feats.append(shape_feature_vector(save_seed_obj))
+                        except Exception:
+                            pass
                     else:
                         gate_pass = False
+
+                    annealer.observe(res_n)
 
                     row_id = store.insert_trial(
                         n_bodies=n,
@@ -460,6 +687,13 @@ def run_choreography_search(
                         "duplicate_result": duplicate_result,
                         "atol_rel": atol_rel,
                         "max_residual": max_residual,
+                        "start_mode": start_mode,
+                        "away_prob": away_prob,
+                        "start_family_dist": (
+                            None
+                            if not np.isfinite(start_family_dist)
+                            else float(start_family_dist)
+                        ),
                         "t_left_s": None if t_end is None else max(0.0, t_end - time.time()),
                     }
                     logf.write(json.dumps(row) + "\n")
@@ -476,6 +710,12 @@ def run_choreography_search(
                     )
                     summary["atol_rel"] = atol_rel
                     summary["max_residual"] = max_residual
+                    summary["away_family_frac"] = fixed_away
+                    summary["away_prob"] = away_prob
+                    summary["anneal"] = annealer.status()
+                    summary["starts_away"] = n_away
+                    summary["starts_baseline"] = n_baseline
+                    summary["family_feats"] = len(family_feats)
                     (out_dir / "summary.json").write_text(
                         json.dumps(summary, indent=2), encoding="utf-8"
                     )
@@ -496,6 +736,12 @@ def run_choreography_search(
                         "trial": trial_no,
                         "error": str(exc),
                         "start_fp": start_fp,
+                        "start_mode": start_mode,
+                        "start_family_dist": (
+                            None
+                            if not np.isfinite(start_family_dist)
+                            else float(start_family_dist)
+                        ),
                         "t_left_s": None if t_end is None else max(0.0, t_end - time.time()),
                     }
                     logf.write(json.dumps(row) + "\n")
@@ -513,5 +759,16 @@ def run_choreography_search(
         )
         summary["atol_rel"] = atol_rel
         summary["max_residual"] = max_residual
+        summary["away_family_frac"] = fixed_away
+        summary["away_min_sep"] = away_min_sep
+        summary["away_prob"] = (
+            float(np.clip(fixed_away, 0.0, 1.0))
+            if fixed_away is not None
+            else annealer.away_prob()
+        )
+        summary["anneal"] = annealer.status()
+        summary["starts_away"] = n_away
+        summary["starts_baseline"] = n_baseline
+        summary["family_feats"] = len(family_feats)
         (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
         return summary

@@ -61,12 +61,48 @@ def main() -> None:
         action="store_true",
         help="do not move existing pass_*.json into pass_json_archive/",
     )
+    p.add_argument(
+        "--away-family-frac",
+        type=float,
+        default=None,
+        help="fixed away-start probability; default=None uses residual annealing",
+    )
+    p.add_argument(
+        "--away-min-sep",
+        type=float,
+        default=0.12,
+        help="min shape distance to nearest accepted family for away starts",
+    )
+    p.add_argument(
+        "--away-tries",
+        type=int,
+        default=24,
+        help="rejection samples per away start before best-effort fallback",
+    )
+    p.add_argument(
+        "--anneal-window",
+        type=int,
+        default=40,
+        help="residual window for away-prob annealing",
+    )
+    p.add_argument(
+        "--anneal-warmup",
+        type=int,
+        default=24,
+        help="trials before annealing raises away-prob above the floor",
+    )
     args = p.parse_args()
     out = args.out or (ROOT / "experiments" / "output" / f"choreography_search_n{args.n}")
     wall = None if args.wall_hours <= 0 else args.wall_hours
+    away_desc = (
+        f"fixed:{args.away_family_frac:g}"
+        if args.away_family_frac is not None
+        else "anneal"
+    )
     print(
         f"choreography search n={args.n} wall={'unlimited' if wall is None else f'{wall}h'} "
-        f"fresh={args.fresh} atol_rel={args.atol_rel:g} max_residual={args.max_residual:g} → {out}",
+        f"fresh={args.fresh} atol_rel={args.atol_rel:g} max_residual={args.max_residual:g} "
+        f"away={away_desc} → {out}",
         flush=True,
     )
 
@@ -89,6 +125,11 @@ def main() -> None:
         write_pass_json=args.write_pass_json,
         import_json=args.import_json,
         archive_json=not args.keep_pass_json,
+        away_family_frac=args.away_family_frac,
+        away_min_sep=args.away_min_sep,
+        away_tries=args.away_tries,
+        anneal_window=args.anneal_window,
+        anneal_warmup=args.anneal_warmup,
         on_progress=prog,
     )
     print("DONE", summary, flush=True)
