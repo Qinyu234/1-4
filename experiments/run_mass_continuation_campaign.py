@@ -21,7 +21,11 @@ from fairy_orbit.observe.campaign_prefs import (
     campaign_priority_blurb,
 )
 from fairy_orbit.observe.choreography_verify import accept_seed_choreography
-from fairy_orbit.observe.continuation import run_path_a_continuation, run_path_b_mass_scan
+from fairy_orbit.observe.continuation import (
+    DEFAULT_PATH_A_MAX_NFEV,
+    run_path_a_continuation,
+    run_path_b_mass_scan,
+)
 from fairy_orbit.observe.floquet_sweep import floquet_path_sweep
 from fairy_orbit.observe.stability import floquet_multipliers_fd
 
@@ -44,7 +48,25 @@ def main() -> None:
         help="<=0 means unlimited",
     )
     p.add_argument("--shift", type=int, default=1)
-    p.add_argument("--max-nfev", type=int, default=10)
+    p.add_argument(
+        "--max-nfev",
+        type=int,
+        default=DEFAULT_PATH_A_MAX_NFEV,
+        help=f"LM residual eval budget per Mc step (default {DEFAULT_PATH_A_MAX_NFEV})",
+    )
+    p.add_argument(
+        "--res-tol",
+        type=float,
+        default=1e-4,
+        help="accept Mc step when ||F|| < res_tol (residual-dominated; "
+        "ignores least_squares success flag)",
+    )
+    p.add_argument(
+        "--m-c-max",
+        type=float,
+        default=1.0,
+        help="Path A stop mass (default 1.0)",
+    )
     p.add_argument("--out", type=Path, default=None)
     p.add_argument(
         "--floquet-sweep",
@@ -123,8 +145,10 @@ def main() -> None:
         summary = run_path_a_continuation(
             seed,
             wall_hours=wall,
+            M_c_max=args.m_c_max,
             shift=args.shift,
             max_nfev=args.max_nfev,
+            res_tol=args.res_tol,
             out_dir=out,
             optics_soft=args.optics_soft,
             log_rho=args.log_rho,
@@ -167,6 +191,7 @@ def main() -> None:
             wall_hours=wall,
             shift=args.shift,
             max_nfev=args.max_nfev,
+            res_tol=args.res_tol,
             out_dir=out,
         )
     print("DONE", summary, flush=True)

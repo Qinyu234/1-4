@@ -334,17 +334,25 @@ def mass_continuation_smoke(
     )
 
 
+# Default LM budget — low values often leave sol.success=False even when ||F|| is tiny.
+DEFAULT_PATH_A_MAX_NFEV = 80
+
+
 def correct_at_mass(
     seed: OrbitSeed,
     M_c: float,
     *,
     shift: int = 1,
-    max_nfev: int = 10,
+    max_nfev: int = DEFAULT_PATH_A_MAX_NFEV,
     period: float | None = None,
     optics_soft: bool = True,
     log_rho: float = 0.0,
 ) -> tuple[OrbitSeed, float, bool]:
-    """Newton-ish corrector at fixed M_c; returns updated fairy seed + ||F||."""
+    """Newton-ish corrector at fixed M_c; returns (seed, ||F||, ls_success).
+
+    Callers should treat ``||F|| < res_tol`` as the step accept criterion;
+    ``ls_success`` is diagnostic only (LM may exhaust nfev without success=True).
+    """
     period = float(period if period is not None else seed.period)
     sys_m = attach_central_mass(seed, M_c)
     y0 = pack_fairy_state(sys_m, seed)
@@ -388,7 +396,7 @@ def run_path_a_continuation(
     M_c_max: float = 1.0,
     dM0: float = 1e-3,
     shift: int = 1,
-    max_nfev: int = 10,
+    max_nfev: int = DEFAULT_PATH_A_MAX_NFEV,
     res_tol: float = 1e-4,
     out_dir: Path | None = None,
     optics_soft: bool = True,
@@ -396,8 +404,9 @@ def run_path_a_continuation(
 ) -> dict[str, Any]:
     """
     Path A: raise M_c from 0 with adaptive step; each step LS-correct.
-    On failure: halve dM (fold-lite); stop at wall (if set) or M_c_max.
-    ``wall_hours=None`` / ``<=0`` means no wall clock limit.
+    Accept a step when ``||F|| < res_tol`` (residual-dominated), even if LM
+    did not set ``success=True``. On failure: halve dM (fold-lite); stop at
+    wall (if set) or M_c_max. ``wall_hours=None`` / ``<=0`` means no wall limit.
     """
     import json
     import time
@@ -456,17 +465,19 @@ def run_path_a_continuation(
                 if dM < 1e-8:
                     break
                 continue
+            step_ok = bool(res_n < res_tol)
             row = {
                 "M_c": target,
                 "residual": res_n,
-                "ok": ok and res_n < res_tol,
+                "ok": step_ok,
+                "ls_success": bool(ok),
                 "dM": dM,
                 "t_left_s": None if t_end is None else max(0.0, t_end - time.time()),
             }
             logf.write(json.dumps(row) + "\n")
             logf.flush()
             steps += 1
-            if ok and res_n < res_tol:
+            if step_ok:
                 M_c = target
                 current = nxt
                 save_seed(current, out_dir / f"state_Mc_{M_c:.6e}.json")
@@ -485,6 +496,8 @@ def run_path_a_continuation(
         "out_dir": str(out_dir),
         "optics_soft": optics_soft,
         "log_rho": log_rho,
+        "res_tol": res_tol,
+        "max_nfev": max_nfev,
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     save_seed(current, out_dir / "final.json")
@@ -523,7 +536,7 @@ def run_path_b_mass_scan(
     mu_min: float = 1e-3,
     n_log_steps: int = 40,
     shift: int = 1,
-    max_nfev: int = 10,
+    max_nfev: int = DEFAULT_PATH_A_MAX_NFEV,
     res_tol: float = 1e-4,
     out_dir: Path | None = None,
 ) -> dict[str, Any]:
@@ -621,16 +634,18 @@ def run_path_b_mass_scan(
                 logf.write(json.dumps({"mu": float(mu), "error": str(exc)}) + "\n")
                 logf.flush()
                 break
+            step_ok = bool(res_n < res_tol)
             row = {
                 "mu": float(mu),
                 "residual": res_n,
-                "ok": ok and res_n < res_tol,
+                "ok": step_ok,
+                "ls_success": bool(ok),
                 "t_left_s": None if t_end is None else max(0.0, t_end - time.time()),
             }
             logf.write(json.dumps(row) + "\n")
             logf.flush()
             done += 1
-            if ok and res_n < res_tol:
+            if step_ok:
                 current = nxt
                 save_seed(current, out_dir / f"state_mu_{mu:.6e}.json")
             else:
