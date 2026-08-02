@@ -69,6 +69,14 @@ def _fairy_slice(sys: System, seed: OrbitSeed) -> tuple[np.ndarray, np.ndarray]:
     return pos, vel
 
 
+def _pow_perm(perm: tuple[int, ...], k: int) -> tuple[int, ...]:
+    a = list(range(len(perm)))
+    kk = int(k) % len(perm) if len(perm) else 0
+    for _ in range(kk):
+        a = [perm[i] for i in a]
+    return tuple(a)
+
+
 def symmetry_residual_vector(
     sys: System,
     seed: OrbitSeed,
@@ -82,11 +90,18 @@ def symmetry_residual_vector(
     w_gravity: float = 1.0,
     w_optics: float = 1.0,
     encounter_factor: float = 3.0,
+    horizon_periods: float = 0.0,
 ) -> np.ndarray:
     """
-    Flattened residual of §3.2 on the fairy subset after integrating τ=T/n.
+    Flattened residual of §3.2 on the fairy subset.
 
-    F = stack_i ( r_i(τ) - R r_{P(i)}(0),  v_i(τ) - R v_{P(i)}(0) ).
+    * ``horizon_periods <= 0`` (legacy): integrate to τ=T/n with role-cycle
+      perm of ``shift``.
+    * ``horizon_periods = k > 0``: integrate to ``k·T`` and close with
+      ``perm^{round(k·n)}`` (integer ``k`` ⇒ identity). Used for long-horizon
+      Path A polish (e.g. k=4).
+
+    F = stack_i ( r_i(t*) - R r_{P(i)}(0),  v_i(t*) - R v_{P(i)}(0) ).
 
     When a central body is present and ``optics_soft``, also append soft
     extras: gravity close-approach attract + encounter-conditioned
@@ -97,8 +112,22 @@ def symmetry_residual_vector(
     lr = float(log_rho) if log_rho is not None else DEFAULT_LOG_RHO
 
     n = seed.n_bodies
-    tau = float(period) / n
-    perm = cyclic_role_perm(n, shift=shift)
+    period = float(period)
+    tau = period / n
+    base_perm = cyclic_role_perm(n, shift=shift)
+    hp = float(horizon_periods)
+    if hp > 0.0:
+        t_star = hp * period
+        # After k full periods, roles advance by k·n cyclic steps → identity
+        # when k is integer.
+        n_steps = int(round(hp * n))
+        perm = _pow_perm(base_perm, n_steps)
+        n_out_floor = max(int(n_outputs), int(32 * max(hp, 1.0)))
+    else:
+        t_star = tau
+        perm = base_perm
+        n_out_floor = int(n_outputs)
+
     r0, v0 = _fairy_slice(sys, seed)
     has_central = len(sys.bodies) > n
     cfg = ReboundConfig(
@@ -113,9 +142,12 @@ def symmetry_residual_vector(
 
     extras: list[float] = []
     if optics_soft and has_central:
-        n_out = max(int(n_outputs), 32)
-        traj = integrate(sys, t_end=float(period), n_outputs=n_out, config=cfg)
-        t_idx = int(np.argmin(np.abs(traj.times - tau)))
+        # Soft extras need a full trajectory; use at least one orbital period,
+        # or the long horizon when polishing over many periods.
+        t_soft = max(period, t_star)
+        n_out = max(n_out_floor, 32)
+        traj = integrate(sys, t_end=float(t_soft), n_outputs=n_out, config=cfg)
+        t_idx = int(np.argmin(np.abs(traj.times - t_star)))
         r = traj.positions[t_idx, 1 : n + 1]
         v = traj.velocities[t_idx, 1 : n + 1]
         extras = list(
@@ -130,7 +162,7 @@ def symmetry_residual_vector(
             )
         )
     else:
-        traj = integrate(sys, t_end=tau, n_outputs=n_outputs, config=cfg)
+        traj = integrate(sys, t_end=float(t_star), n_outputs=max(n_out_floor, 8), config=cfg)
         if traj.n_bodies == n:
             r = traj.positions[-1]
             v = traj.velocities[-1]
@@ -336,6 +368,8 @@ def mass_continuation_smoke(
 
 # Default LM budget — low values often leave sol.success=False even when ||F|| is tiny.
 DEFAULT_PATH_A_MAX_NFEV = 80
+# Long-horizon Path A objective: residual after this many orbital periods (0 = τ=T/n).
+DEFAULT_PATH_A_HORIZON_PERIODS = 4.0
 
 
 def correct_at_mass(
@@ -347,6 +381,7 @@ def correct_at_mass(
     period: float | None = None,
     optics_soft: bool = True,
     log_rho: float = 0.0,
+    horizon_periods: float = DEFAULT_PATH_A_HORIZON_PERIODS,
 ) -> tuple[OrbitSeed, float, bool]:
     """Newton-ish corrector at fixed M_c; returns (seed, ||F||, ls_success).
 
@@ -366,6 +401,7 @@ def correct_at_mass(
             shift=shift,
             optics_soft=optics_soft,
             log_rho=log_rho,
+            horizon_periods=horizon_periods,
         )
 
     sol = least_squares(fun, y0, method="lm", max_nfev=max_nfev, ftol=1e-8, xtol=1e-8)
@@ -383,7 +419,7 @@ def correct_at_mass(
         names=seed.names,
         symmetry=seed.symmetry,
         source=seed.source,
-        notes=f"corrected M_c={M_c}",
+        notes=f"corrected M_c={M_c} horizon_periods={horizon_periods}",
         central_index=None,
     )
     return out, float(np.linalg.norm(sol.fun)), bool(sol.success)
@@ -401,12 +437,16 @@ def run_path_a_continuation(
     out_dir: Path | None = None,
     optics_soft: bool = True,
     log_rho: float = 0.0,
+    horizon_periods: float = DEFAULT_PATH_A_HORIZON_PERIODS,
 ) -> dict[str, Any]:
     """
     Path A: raise M_c from 0 with adaptive step; each step LS-correct.
     Accept a step when ``||F|| < res_tol`` (residual-dominated), even if LM
     did not set ``success=True``. On failure: halve dM (fold-lite); stop at
     wall (if set) or M_c_max. ``wall_hours=None`` / ``<=0`` means no wall limit.
+
+    Residual horizon: ``horizon_periods`` full orbital periods (default 4);
+    ``0`` restores the short §3.2 map at τ=T/n.
     """
     import json
     import time
@@ -442,6 +482,7 @@ def run_path_a_continuation(
                     "note": "start",
                     "optics_soft": optics_soft,
                     "log_rho": log_rho,
+                    "horizon_periods": horizon_periods,
                 }
             )
             + "\n"
@@ -456,6 +497,7 @@ def run_path_a_continuation(
                     max_nfev=max_nfev,
                     optics_soft=optics_soft,
                     log_rho=log_rho,
+                    horizon_periods=horizon_periods,
                 )
             except Exception as exc:
                 row = {"M_c": target, "error": str(exc), "dM": dM}
@@ -472,6 +514,7 @@ def run_path_a_continuation(
                 "ok": step_ok,
                 "ls_success": bool(ok),
                 "dM": dM,
+                "horizon_periods": horizon_periods,
                 "t_left_s": None if t_end is None else max(0.0, t_end - time.time()),
             }
             logf.write(json.dumps(row) + "\n")
@@ -498,6 +541,7 @@ def run_path_a_continuation(
         "log_rho": log_rho,
         "res_tol": res_tol,
         "max_nfev": max_nfev,
+        "horizon_periods": horizon_periods,
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     save_seed(current, out_dir / "final.json")

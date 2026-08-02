@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from fairy_orbit.design.seeds import load_seed
+from fairy_orbit.design.seeds import load_seed, save_seed
 from fairy_orbit.observe.campaign_prefs import (
     ALLOW_UNSTABLE_PATH_A_SEED,
     FLOQUET_STABLE_ATOL,
@@ -22,14 +22,93 @@ from fairy_orbit.observe.campaign_prefs import (
 )
 from fairy_orbit.observe.choreography_verify import accept_seed_choreography
 from fairy_orbit.observe.continuation import (
+    DEFAULT_PATH_A_HORIZON_PERIODS,
     DEFAULT_PATH_A_MAX_NFEV,
+    attach_central_mass,
+    correct_at_mass,
     run_path_a_continuation,
     run_path_b_mass_scan,
+    symmetry_residual_vector,
 )
 from fairy_orbit.observe.floquet_sweep import floquet_path_sweep
 from fairy_orbit.observe.stability import floquet_multipliers_fd
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _correct_only(
+    seed,
+    *,
+    M_c: float,
+    out: Path,
+    shift: int,
+    max_nfev: int,
+    optics_soft: bool,
+    log_rho: float,
+    horizon_periods: float,
+    floquet: bool,
+    floquet_stable_atol: float,
+) -> dict:
+    import json
+
+    import numpy as np
+
+    out.mkdir(parents=True, exist_ok=True)
+    sys0 = attach_central_mass(seed, float(M_c))
+    f0 = symmetry_residual_vector(
+        sys0,
+        seed,
+        seed.period,
+        shift=shift,
+        optics_soft=optics_soft,
+        log_rho=log_rho,
+        horizon_periods=horizon_periods,
+    )
+    n_before = float(np.linalg.norm(f0))
+    polished, n_after, ls_ok = correct_at_mass(
+        seed,
+        float(M_c),
+        shift=shift,
+        max_nfev=max_nfev,
+        optics_soft=optics_soft,
+        log_rho=log_rho,
+        horizon_periods=horizon_periods,
+    )
+    tag = (
+        int(horizon_periods)
+        if abs(horizon_periods - round(horizon_periods)) < 1e-12
+        else horizon_periods
+    )
+    state_path = out / f"state_horizon{tag}.json"
+    save_seed(polished, state_path)
+
+    fl = None
+    if floquet:
+        try:
+            fl = floquet_multipliers_fd(
+                polished, shift=shift, stable_atol=floquet_stable_atol
+            ).to_dict()
+        except Exception as exc:  # noqa: BLE001
+            fl = {"error": str(exc)}
+
+    summary = {
+        "path": "A_correct_only",
+        "n": seed.n_bodies,
+        "M_c": float(M_c),
+        "horizon_periods": float(horizon_periods),
+        "optics_soft": bool(optics_soft),
+        "log_rho": float(log_rho),
+        "residual_before": n_before,
+        "residual_after": float(n_after),
+        "ls_success": bool(ls_ok),
+        "out": str(state_path),
+        "floquet": fl,
+    }
+    (out / f"state_horizon{tag}.report.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
+    (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return summary
 
 
 def main() -> None:
@@ -67,6 +146,18 @@ def main() -> None:
         default=1.0,
         help="Path A stop mass (default 1.0)",
     )
+    p.add_argument(
+        "--m-c",
+        type=float,
+        default=None,
+        help="with --correct-only: fixed central mass to re-polish",
+    )
+    p.add_argument(
+        "--correct-only",
+        action="store_true",
+        help="skip Mc continuation; LM-correct seed once at --m-c "
+        "using --horizon-periods residual",
+    )
     p.add_argument("--out", type=Path, default=None)
     p.add_argument(
         "--floquet-sweep",
@@ -97,41 +188,82 @@ def main() -> None:
         default=True,
         help="Path A soft extras: gravity close-approach + perp optical deficit",
     )
+    p.add_argument(
+        "--horizon-periods",
+        type=float,
+        default=DEFAULT_PATH_A_HORIZON_PERIODS,
+        help="Path A residual after this many orbital periods "
+        f"(default {DEFAULT_PATH_A_HORIZON_PERIODS}; 0 = legacy τ=T/n). "
+        "Pass once per run; for 3P and 4P invoke the script twice.",
+    )
     args = p.parse_args()
 
     if not (-1.0 <= float(args.log_rho) <= 1.0):
         raise SystemExit("--log-rho must be in [-1, 1]")
+    if args.correct_only and args.m_c is None:
+        raise SystemExit("--correct-only requires --m-c")
+    if args.correct_only and args.n != 4:
+        raise SystemExit("--correct-only is Path A (n=4) only")
 
     print(campaign_priority_blurb(), flush=True)
     seed = load_seed(args.seed)
-    acc = accept_seed_choreography(seed, shift=args.shift, atol_rel=1e-5)
-    if not acc.ok:
-        print(f"seed rejected: {acc.reason}", flush=True)
-        raise SystemExit(2)
+    if not args.correct_only:
+        acc = accept_seed_choreography(seed, shift=args.shift, atol_rel=1e-5)
+        if not acc.ok:
+            print(f"seed rejected: {acc.reason}", flush=True)
+            raise SystemExit(2)
 
     # Diagnostic Floquet on the equal-mass start (does not block by default).
-    try:
-        fl0 = floquet_multipliers_fd(
-            seed, shift=args.shift, stable_atol=args.floquet_stable_atol
-        )
-        print(
-            f"seed Floquet: stable={fl0.stable} max_abs={fl0.max_abs:.4f} "
-            f"n_unstable={fl0.n_unstable}",
-            flush=True,
-        )
-        if not fl0.stable:
-            if args.require_floquet_stable_seed or not ALLOW_UNSTABLE_PATH_A_SEED:
-                print("refusing unstable seed (--require-floquet-stable-seed)", flush=True)
-                raise SystemExit(3)
+    if not args.correct_only:
+        try:
+            fl0 = floquet_multipliers_fd(
+                seed, shift=args.shift, stable_atol=args.floquet_stable_atol
+            )
             print(
-                "note: unstable equal-mass start is OK — Path A + Floquet "
-                "resweep looks for |λ|=1 crossings along M_c",
+                f"seed Floquet: stable={fl0.stable} max_abs={fl0.max_abs:.4f} "
+                f"n_unstable={fl0.n_unstable}",
                 flush=True,
             )
-    except SystemExit:
-        raise
-    except Exception as exc:
-        print(f"seed Floquet diagnostic skipped: {exc}", flush=True)
+            if not fl0.stable:
+                if args.require_floquet_stable_seed or not ALLOW_UNSTABLE_PATH_A_SEED:
+                    print(
+                        "refusing unstable seed (--require-floquet-stable-seed)",
+                        flush=True,
+                    )
+                    raise SystemExit(3)
+                print(
+                    "note: unstable equal-mass start is OK — Path A + Floquet "
+                    "resweep looks for |λ|=1 crossings along M_c",
+                    flush=True,
+                )
+        except SystemExit:
+            raise
+        except Exception as exc:
+            print(f"seed Floquet diagnostic skipped: {exc}", flush=True)
+
+    if args.correct_only:
+        out = args.out or (
+            ROOT / "experiments" / "output" / "best_orbit_plots" / "path_a_best_Mc"
+        )
+        print(
+            f"Path A correct-only M_c={args.m_c} horizon={args.horizon_periods}P "
+            f"seed={args.seed} → {out}",
+            flush=True,
+        )
+        summary = _correct_only(
+            seed,
+            M_c=float(args.m_c),
+            out=out,
+            shift=args.shift,
+            max_nfev=args.max_nfev,
+            optics_soft=args.optics_soft,
+            log_rho=args.log_rho,
+            horizon_periods=float(args.horizon_periods),
+            floquet=bool(args.floquet_sweep),
+            floquet_stable_atol=args.floquet_stable_atol,
+        )
+        print("DONE", summary, flush=True)
+        return
 
     wall = None if args.wall_hours <= 0 else args.wall_hours
 
@@ -139,7 +271,7 @@ def main() -> None:
         out = args.out or (ROOT / "experiments" / "output" / "continuation_n4")
         print(
             f"Path A Mc↑ n=4 wall={'unlimited' if wall is None else f'{wall}h'} "
-            f"seed={args.seed} → {out}",
+            f"horizon={args.horizon_periods}P seed={args.seed} → {out}",
             flush=True,
         )
         summary = run_path_a_continuation(
@@ -152,6 +284,7 @@ def main() -> None:
             out_dir=out,
             optics_soft=args.optics_soft,
             log_rho=args.log_rho,
+            horizon_periods=args.horizon_periods,
         )
         if args.floquet_sweep:
             print("Floquet path resweep…", flush=True)

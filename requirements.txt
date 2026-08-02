@@ -5,3 +5,4 @@ rebound>=4.4,<5
 optuna>=3.6
 pytest>=7.4
 beautifulsoup4>=4.12
+# Optional optics (starry flux): pip install -r requirements-optics.txt

@@ -29,10 +29,21 @@ def plot_orbits_xy(
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(7.5, 7.5))
-    ax.scatter([0], [0], c="k", s=40, zorder=6, label="central")
+    has_central = any(lab in {"central", "C"} for lab in trajectory.labels)
+    if has_central:
+        for i, lab in enumerate(trajectory.labels):
+            if lab in {"central", "C"}:
+                ax.scatter(
+                    [trajectory.positions[0, i, 0]],
+                    [trajectory.positions[0, i, 1]],
+                    c="k",
+                    s=40,
+                    zorder=6,
+                    label=lab,
+                )
     color_i = 0
     for i, lab in enumerate(trajectory.labels):
-        if lab == "central":
+        if lab in {"central", "C"}:
             continue
         c = FAIRY_COLORS[color_i % len(FAIRY_COLORS)]
         color_i += 1
@@ -71,10 +82,17 @@ def plot_orbits_3d(
 
     fig = plt.figure(figsize=(8, 7))
     ax = fig.add_subplot(111, projection="3d")
-    ax.scatter([0], [0], [0], c="k", s=40, label="central")
     color_i = 0
     for i, lab in enumerate(trajectory.labels):
-        if lab == "central":
+        if lab in {"central", "C"}:
+            ax.scatter(
+                [trajectory.positions[0, i, 0]],
+                [trajectory.positions[0, i, 1]],
+                [trajectory.positions[0, i, 2]],
+                c="k",
+                s=40,
+                label=lab,
+            )
             continue
         c = FAIRY_COLORS[color_i % len(FAIRY_COLORS)]
         color_i += 1
@@ -165,11 +183,18 @@ def export_html_viewer(
     labels = trajectory.labels
 
     frames = []
+    fairy_i = 0
     for fi in range(len(times)):
         data = []
         i0 = max(0, fi - trail)
+        fairy_i = 0
         for i, lab in enumerate(labels):
-            color = "#111111" if lab == "central" else FAIRY_COLORS[(i - 1) % len(FAIRY_COLORS)]
+            is_c = lab in {"central", "C"}
+            if is_c:
+                color = "#111111"
+            else:
+                color = FAIRY_COLORS[fairy_i % len(FAIRY_COLORS)]
+                fairy_i += 1
             trail_pts = pos[i0 : fi + 1, i]
             data.append(
                 {
@@ -180,10 +205,17 @@ def export_html_viewer(
                     "z": trail_pts[:, 2].tolist(),
                     "name": lab,
                     "line": {"width": 3, "color": color},
-                    "marker": {"size": 3 if lab != "central" else 5, "color": color},
+                    "marker": {"size": 5 if is_c else 3, "color": color},
                 }
             )
         frames.append({"name": f"f{fi}", "data": data})
+
+    # Prefer face-on for nearly planar free-N
+    z_span = float(np.ptp(pos[:, :, 2])) if pos.size else 0.0
+    xy_span = float(max(np.ptp(pos[:, :, 0]), np.ptp(pos[:, :, 1]))) if pos.size else 1.0
+    camera = None
+    if z_span < 0.05 * max(xy_span, 1e-12):
+        camera = {"eye": {"x": 0.0, "y": 0.0, "z": 2.2}}
 
     init = frames[0]["data"] if frames else []
     span = float(np.max(np.abs(pos))) * 1.1
@@ -194,6 +226,7 @@ def export_html_viewer(
             "xaxis": {"range": [-span, span]},
             "yaxis": {"range": [-span, span]},
             "zaxis": {"range": [-span, span]},
+            **({"camera": camera} if camera else {}),
         },
         "updatemenus": [
             {
