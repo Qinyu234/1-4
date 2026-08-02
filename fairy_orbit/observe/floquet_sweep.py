@@ -47,8 +47,8 @@ def floquet_path_sweep(
     )
     if not paths:
         raise ValueError(
-            f"no state_Mc_*.json under {cont} — run Path A first; "
-            "equal-mass proxy: experiments/run_floquet_family_sweep.py"
+            f"no state_Mc_*.json under {cont} — run Path A first "
+            "(experiments/run_mass_continuation_campaign.py)"
         )
 
     rows: list[dict[str, Any]] = []

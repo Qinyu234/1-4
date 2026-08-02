@@ -90,12 +90,11 @@ Drift of \((E_r(t),E_v(t))\) is the error time series (`observe.closure`).
 | `fairy_orbit.observe.peo` | Filter: escape → choreography → closure |
 | `fairy_orbit.observe.error_base` | Exp normalize of E_r/E_v |
 | `experiments/verify_orbit_seeds.py` | PROMPT §3.2 seed gate |
-| `experiments/run_mass_continuation_smoke.py` | Path A continuation stub |
-| `experiments/legacy/run_*` | Demoted Bayes/campaign/Td (not mainline) |
+| `experiments/run_mass_continuation_campaign.py` | Path A / Path B continuation |
+| `experiments/run_path_a_cycle.py` | Multi-seed Path A + multiperiod scan |
+| `experiments/optics_tides/` | Central-observer starry photometry |
 | `fairy_orbit.design.seeds` | Equal-mass / hierarchical continuation seed catalogue |
 | `docs/continuation/` | Path A (\(m_c\) from 0) / Path B (\(m_c=1\)) specs |
-| `experiments/verify_orbit_seeds.py` | REBOUND one-period seed acceptance |
-| `experiments/notes/bayes_full_wide_negative.md` | Bayes 2000-trial negative result |
 
 ---
 

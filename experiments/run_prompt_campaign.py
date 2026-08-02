@@ -2,9 +2,8 @@
 """Launch PROMPT mainline jobs (self-expanding; optional wall clock limit).
 
 Thread budget 7:2:6:1 = choreo_n4 : choreo_n5 : path_a : branch2.
-Default activation: **n4 + Path A** (n5 and Branch-2 dark). Opt-in:
-``--with-n5``, ``--with-branch2-probe``. Path A via ``--seed-n4`` /
-``--path-a-from-db``.
+Default activation: **n4 + Path A** (n5 dark). Opt-in: ``--with-n5``.
+Path A via ``--seed-n4`` / ``--path-a-from-db``.
 
 Finite ``--wall-hours`` is split across *launched* slots by those weights.
 """
@@ -18,8 +17,6 @@ from pathlib import Path
 
 from fairy_orbit.observe.campaign_prefs import (
     BRANCH2_IN_DEFAULT_CAMPAIGN,
-    BRANCH2_PROBE_DEFAULT_DIVERSE,
-    BRANCH2_PROBE_DEFAULT_SAMPLES,
     CHOREO_N5_IN_DEFAULT_CAMPAIGN,
     FLOQUET_GATE_DEFAULT,
     PATH_A_IN_DEFAULT_CAMPAIGN,
@@ -33,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     p = argparse.ArgumentParser(
-        description="PROMPT campaign launcher (threads 7:2:6:1; n5/branch2 off by default)"
+        description="PROMPT campaign launcher (threads 7:2:6:1; n5 off by default)"
     )
     p.add_argument(
         "--wall-hours",
@@ -62,11 +59,6 @@ def main() -> None:
         "--with-n5",
         action="store_true",
         help="opt-in choreography search N=5 (weight 2; off by default)",
-    )
-    p.add_argument(
-        "--with-branch2-probe",
-        action="store_true",
-        help="opt-in Branch-2 multi-family probe (weight 1; off by default)",
     )
     p.add_argument(
         "--no-path-a",
@@ -112,15 +104,12 @@ def main() -> None:
         and seed_n4 is not None
     )
     want_n5 = bool(args.with_n5) or CHOREO_N5_IN_DEFAULT_CAMPAIGN
-    want_branch2 = bool(args.with_branch2_probe) or BRANCH2_IN_DEFAULT_CAMPAIGN
 
     active_slots: list[str] = ["choreo_n4"]
     if want_n5:
         active_slots.append("choreo_n5")
     if want_path_a:
         active_slots.append("path_a")
-    if want_branch2:
-        active_slots.append("branch2")
 
     walls = wall_hours_for_slots(args.wall_hours, active_slots)
     print(f"active slots={active_slots} wall_split={walls}", flush=True)
@@ -205,21 +194,6 @@ def main() -> None:
                     str(args.seed_n5),
                     "--wall-hours",
                     str(pb_wall),
-                ],
-            )
-        )
-
-    if want_branch2:
-        jobs.append(
-            (
-                "branch2_probe",
-                [
-                    py,
-                    str(ROOT / "experiments" / "run_branch2_probe.py"),
-                    "--diverse",
-                    str(BRANCH2_PROBE_DEFAULT_DIVERSE),
-                    "--samples",
-                    str(BRANCH2_PROBE_DEFAULT_SAMPLES),
                 ],
             )
         )
